@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@700;900&family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
 
 /* Optional: Add these utility classes if you don't want to configure Tailwind config */
 .font-serif-heading {
