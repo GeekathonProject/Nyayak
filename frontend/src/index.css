@@ -8,3 +8,26 @@
 .font-sans {
   font-family: 'Inter', sans-serif;
 }
+
+@layer utilities {
+  .animate-scroll-left {
+    animation: scroll-left var(--animation-duration, 40s) linear infinite;
+  }
+  .animate-scroll-right {
+    animation: scroll-right var(--animation-duration, 40s) linear infinite;
+  }
+}
+
+@keyframes scroll-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+@keyframes scroll-right {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
