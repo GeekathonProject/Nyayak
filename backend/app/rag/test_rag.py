@@ -1,4 +1,4 @@
-# Change from: from app.rag.pipeline import ask_question
+# Change from: from app.rag.pipeline import ask_question test
 from pipeline import ask_question  
 
 print("🔎 Testing Legal Assistant...")
