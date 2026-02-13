@@ -1,15 +1,55 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, BrowserRouter, Outlet } from "react-router-dom";
+
+// Pages
 import LandingPage from "./pages/LandingPage";
+import LoginPage from "./pages/Login";
+import SignupPage from "./pages/SignupPage";
 import Dashboard from "./pages/Dashboard";
-import Chat from "./pages/Chat";
+import SafetyMap from "./pages/SafetyMap";
+import Profile from "./pages/Profile";
+import Chat from "./pages/Chat"; // ✅ Chat added
+
+// Contexts
+import { ThemeProvider } from "./context/themeContext";
+import { AuthProvider } from "./context/Authcontext";
+
+// Layouts & Protection
+import DashboardLayout from "./layouts/DashboardLayout";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/chat" element={<Chat />} />
-    </Routes>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+
+            {/* ================= PUBLIC ROUTES ================= */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/signup" element={<SignupPage />} />
+
+            {/* ================= PROTECTED ROUTES ================= */}
+            {/* Wrapped with Auth check + Dashboard Layout */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <Outlet />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/map" element={<SafetyMap />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/chat" element={<Chat />} /> {/* ✅ Chat route */}
+            </Route>
+
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -15,21 +15,61 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-// Snappy Animation Variants
+// Logic Imports from main
+import { useAuth } from "../context/Authcontext";
+import { getProfile } from "../lib/profileService"; 
+
+// Dashboard Imports
+import CitizenDashboard from "./dashboards/CitizenDashboard";
+
+// Animation Variants (Required for Framer Motion)
 const fadeInUp = {
   hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } }
+  visible: { opacity: 1, y: 0 }
 };
 
 const staggerContainer = {
   hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
 };
 
 const Dashboard = () => {
-  const [hoveredCard, setHoveredCard] = useState(null);
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const [role, setRole] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [hoveredCard, setHoveredCard] = useState(null);
 
+  useEffect(() => {
+    async function fetchRole() {
+      if (user) {
+        // 1. Check Metadata first
+        if (user.user_metadata?.role) {
+          setRole(user.user_metadata.role);
+          setLoading(false);
+        } else {
+          // 2. Fallback to DB fetch
+          const profile = await getProfile(user.id);
+          setRole(profile?.role || 'citizen');
+          setLoading(false);
+        }
+      }
+    }
+    fetchRole();
+  }, [user]);
+
+  if (loading) return <div className="p-10 text-center">Loading Dashboard...</div>;
+
+  // If the user is NOT a citizen, show their specific dashboards
+  if (role === 'police') return <div className="p-10">Police Dashboard Coming Soon</div>;
+  if (role === 'lawyer') return <div className="p-10">Lawyer Dashboard Coming Soon</div>;
+
+  // Default: Render the Styled Citizen Dashboard (Original BACKEND_ML UI)
   return (
     <motion.div
       initial="hidden"
@@ -42,7 +82,7 @@ const Dashboard = () => {
         color: "#1A1A1A",
       }}
     >
-      {/* 1. HEADER - Glassmorphism with Slide Down */}
+      {/* 1. HEADER */}
       <motion.nav
         initial={{ y: -50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -86,8 +126,8 @@ const Dashboard = () => {
                 <div style={{ position: "absolute", top: -2, right: -2, width: "8px", height: "8px", background: "#E85D04", borderRadius: "50%", border: "2px solid white" }} />
              </div>
              <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#f0f0f0", padding: "5px 15px 5px 5px", borderRadius: "30px" }}>
-                <img src="https://i.pravatar.cc/35" alt="profile" style={{ borderRadius: "50%" }} />
-                <span style={{ fontSize: "13px", fontWeight: 600 }}>Rahul V.</span>
+                <img src={user?.user_metadata?.avatar_url || "https://i.pravatar.cc/35"} alt="profile" style={{ borderRadius: "50%", width: "30px" }} />
+                <span style={{ fontSize: "13px", fontWeight: 600 }}>{user?.user_metadata?.full_name || "User"}</span>
              </div>
           </div>
         </div>
@@ -98,7 +138,7 @@ const Dashboard = () => {
         <motion.div variants={fadeInUp}>
           <h1 style={{ fontSize: "52px", fontWeight: 800, lineHeight: 1.1, letterSpacing: "-1px" }}>
             Welcome back, <br />
-            <span style={{ color: "#E85D04" }}>Rahul Verma</span>
+            <span style={{ color: "#E85D04" }}>{user?.user_metadata?.full_name || "Citizen"}</span>
           </h1>
           <p style={{ marginTop: "20px", fontSize: "18px", color: "#666", maxWidth: "500px" }}>
             Your digital legal companion. Track your FIRs, access emergency support, and stay informed.
@@ -165,7 +205,7 @@ const Dashboard = () => {
         </motion.div>
       </div>
 
-      {/* 3. FEATURE CARDS - Staggered Appearance */}
+      {/* 3. FEATURE CARDS */}
       <motion.div 
         variants={staggerContainer}
         style={{ marginTop: "60px", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "25px" }}
@@ -225,7 +265,6 @@ const Dashboard = () => {
 
       {/* 4. LOWER DASHBOARD AREA */}
       <div style={{ marginTop: "50px", display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: "30px" }}>
-        {/* CASE TRACKING */}
         <motion.div 
           variants={fadeInUp}
           style={{ background: "white", padding: "30px", borderRadius: "32px", border: "1px solid #F0F0F0" }}
@@ -246,7 +285,6 @@ const Dashboard = () => {
            </div>
         </motion.div>
 
-        {/* LIVE MAP */}
         <motion.div 
           variants={fadeInUp}
           style={{ background: "white", padding: "30px", borderRadius: "32px", border: "1px solid #F0F0F0", position: "relative", overflow: "hidden" }}
@@ -264,7 +302,7 @@ const Dashboard = () => {
         </motion.div>
       </div>
 
-      {/* 5. FOOTER SOS SECTION */}
+      {/* 5. SOS FOOTER */}
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         whileInView={{ opacity: 1, scale: 1 }}
