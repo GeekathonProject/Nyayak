@@ -1,13 +1,15 @@
-import { Routes, Route, BrowserRouter, Outlet } from "react-router-dom"; // Import Outlet
+import { Routes, Route, BrowserRouter, Outlet } from "react-router-dom";
 
 // Pages
 import LandingPage from "./pages/LandingPage";
-import LoginPage from "./pages/Login"; 
+import LoginPage from "./pages/Login";
 import SignupPage from "./pages/SignupPage";
 import Dashboard from "./pages/Dashboard";
 import SafetyMap from "./pages/SafetyMap";
 import Profile from "./pages/Profile";
 import ProfileLayout from "./layouts/ProfileLayout";
+import Chat from "./pages/Chat"; // ✅ Chat added
+
 // Contexts
 import { ThemeProvider } from "./context/themeContext";
 import { AuthProvider } from "./context/Authcontext";
@@ -19,11 +21,11 @@ import ProtectedRoute from "./components/ProtectedRoute";
 function App() {
   return (
     <ThemeProvider>
-      <AuthProvider> 
+      <AuthProvider>
         <BrowserRouter>
           <Routes>
-            
-            {/* PUBLIC ROUTES */}
+
+            {/* ================= PUBLIC ROUTES ================= */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
@@ -51,6 +53,7 @@ function App() {
               {/* ✅ ADD PROFILE HERE */}
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/security" element={<div className="p-10">Security Settings (Coming Soon)</div>} />
+              <Route path="/chat" element={<Chat />} /> {/* ✅ Chat route */}
             </Route>
 
           </Routes>

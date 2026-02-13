@@ -3,12 +3,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.rag.pipeline import ask_question_with_doc
 from pypdf import PdfReader
 import io
+import torch
+
+
+print("CUDA available:", torch.cuda.is_available())
+
+if torch.cuda.is_available():
+    print("GPU Name:", torch.cuda.get_device_name(0))
+else:
+    print("Running on CPU")
+
 
 app = FastAPI(title="Indian Legal AI Assistant")
 
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:5173",
 ]
 
 app.add_middleware(
