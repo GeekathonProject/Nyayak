@@ -5,6 +5,7 @@ import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/Login";
 import SignupPage from "./pages/SignupPage";
 import ContactPage from "./Contact-page";
+import AboutPage from "./pages/About";
 
 import Dashboard from "./pages/Dashboard";
 import MyCases from "./pages/myCases";
@@ -39,6 +40,7 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/contact" element={<ContactPage />} />
+            <Route path="/about" element={<AboutPage />} />
 
 
             {/* ================= LAWYER PROTECTED ROUTES ================= */}

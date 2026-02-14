@@ -41,7 +41,7 @@ const Navbar = () => {
     How it Works
   </Link>
 
-  <Link to="/map" className="hover:text-orange-500 transition-colors">
+  <Link to="/about" className="hover:text-orange-500 transition-colors">
     About
   </Link>
 
