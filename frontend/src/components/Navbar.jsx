@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Scale, Sun, Moon, Menu, X } from 'lucide-react';
 import { useTheme } from '../context/themeContext';
+import SafetyMap from '../pages/SafetyMap';
 
 const Navbar = () => {
   const { isDark, toggleTheme } = useTheme();
@@ -32,16 +33,23 @@ const Navbar = () => {
 
         {/* Center Links (Desktop) */}
         <div className={`hidden md:flex items-center gap-8 text-sm font-medium ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-          {['Features', 'How It Works', 'Safety Map', 'About'].map((item) => (
-            <a 
-              key={item} 
-              href={`#${item.toLowerCase().replace(/ /g, '-')}`} 
-              className="hover:text-orange-500 transition-colors"
-            >
-              {item}
-            </a>
-          ))}
-        </div>
+  <Link to="/map" className="hover:text-orange-500 transition-colors">
+    Features
+  </Link>
+
+  <Link to="/map" className="hover:text-orange-500 transition-colors">
+    How it Works
+  </Link>
+
+  <Link to="/map" className="hover:text-orange-500 transition-colors">
+    About
+  </Link>
+
+  <Link to="/contact" className="hover:text-orange-500 transition-colors">
+    Contact-Us
+  </Link>
+</div>
+
 
         {/* Right Actions */}
         <div className="flex items-center gap-3">
