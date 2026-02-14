@@ -6,6 +6,7 @@ import LoginPage from "./pages/Login";
 import SignupPage from "./pages/SignupPage";
 
 import Dashboard from "./pages/Dashboard";
+import MyCases from "./pages/myCases";
 import SafetyMap from "./pages/SafetyMap";
 import Chat from "./pages/Chat";
 import Profile from "./pages/Profile";
@@ -109,6 +110,7 @@ function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/map" element={<SafetyMap />} />
               <Route path="/chat" element={<Chat />} />
+              <Route path="/cases" element={<MyCases />} />
               <Route path="/complaint" element={<ComplaintPage/>} />
             </Route>
 
