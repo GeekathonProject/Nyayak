@@ -15,6 +15,7 @@ import { ThemeProvider } from "./context/themeContext";
 import { AuthProvider } from "./context/Authcontext";
 import LawyerDashboard from "./pages/lawyer/LawyerDashboard";
 import LawyerLayout from "./layouts/LawyerLayout";
+import Schedule from "./pages/lawyer/schedule/Schedule";
 // Layouts & Protection
 import DashboardLayout from "./layouts/DashboardLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -49,7 +50,7 @@ function App() {
               {/* Placeholders for links to prevent crashing */}
               {/* <Route path="/lawyer/cases" element={<div className="p-10">My Cases (Coming Soon)</div>} /> */}
               {/* <Route path="/lawyer/tools" element={<div className="p-10">Drafting Tools (Coming Soon)</div>} /> */}
-              {/* <Route path="/lawyer/schedule" element={<div className="p-10">Court Schedule (Coming Soon)</div>} /> */}
+              <Route path="/lawyer/schedule" element={<Schedule />} />
             </Route>
             <Route element={
               <ProtectedRoute>

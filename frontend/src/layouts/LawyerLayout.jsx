@@ -11,7 +11,7 @@ import {
 
 // ⚖️ DEFINE LAWYER LINKS HERE
 const LAWYER_LINKS = [
-  { icon: LayoutDashboard, label: "Chamber", path: "/lawyer/dashboard" },
+  { icon: LayoutDashboard, label: "Chamber", path: "/lawyer/legal-dashboard" },
   { icon: Inbox, label: "Case Requests", path: "/lawyer/requests" },
   { icon: Briefcase, label: "My Docket", path: "/lawyer/cases" },
   { icon: ScrollText, label: "Drafting Tool", path: "/lawyer/tools" },

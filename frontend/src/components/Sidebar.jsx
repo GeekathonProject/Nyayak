@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { 
   LogOut,
   Scale,
@@ -25,6 +25,7 @@ const CITIZEN_LINKS = [
 
 const Sidebar = ({ isCollapsed, toggleSidebar, links = CITIZEN_LINKS, roleLabel = "Citizen" }) => {
   const { logout, user } = useAuth();
+  const navigate = useNavigate();
 
   const getUserInitials = () => {
     const name = user?.user_metadata?.full_name || "User";
@@ -32,8 +33,8 @@ const Sidebar = ({ isCollapsed, toggleSidebar, links = CITIZEN_LINKS, roleLabel 
   };
   const handleLogout = async () => {
     await logout();
-    navigate("/"); // or "/"
-    };
+    navigate("/");
+  };
 
   const getUserName = () => {
      return user?.user_metadata?.full_name || "Account";
@@ -114,6 +115,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar, links = CITIZEN_LINKS, roleLabel 
         `}>
           <div className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-bold
             bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-sm
+
             dark:from-slate-700 dark:to-slate-600 dark:text-white
           ">
             {getUserInitials()}
