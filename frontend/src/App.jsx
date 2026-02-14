@@ -10,6 +10,7 @@ import MyCases from "./pages/myCases";
 import SafetyMap from "./pages/SafetyMap";
 import Chat from "./pages/Chat";
 import Profile from "./pages/Profile";
+import PoliceLayout from "./layouts/PoliceLayout";
 
 import LawyerDashboard from "./pages/lawyer/LawyerDashboard";
 import CaseManagement from "./pages/lawyer/CaseManagement";
@@ -22,9 +23,14 @@ import ProfileLayout from "./layouts/ProfileLayout";
 /* ================= CONTEXT ================= */
 import { ThemeProvider } from "./context/themeContext";
 import { AuthProvider } from "./context/Authcontext";
-
-/* ================= ROUTE PROTECTION ================= */
+import LawyerDashboard from "./pages/lawyer/LawyerDashboard";
+import LawyerLayout from "./layouts/LawyerLayout";
+import Schedule from "./pages/lawyer/schedule/Schedule";
+// Layouts & Protection
+import DashboardLayout from "./layouts/DashboardLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import PoliceDashboard from "./pages/police/PoliceDashboard";
+import ComplaintPage from "./pages/ComplaintPage";
 
 function App() {
   return (
@@ -37,6 +43,38 @@ function App() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
+
+            {/* 🔒 PROTECTED APP SHELL */}
+            {/* This single Route wraps ALL protected pages with Layout & Auth Check */}
+            <Route element={
+              <ProtectedRoute>
+                <LawyerLayout>
+                  <Outlet />
+                </LawyerLayout>
+              </ProtectedRoute>
+            }>
+              {/* The Chamber (Main Dashboard) */}
+              <Route path="/lawyer/legal-dashboard" element={<LawyerDashboard />} />
+              
+              {/* The Requests (Marketplace) */}
+              {/* <Route path="/lawyer/requests" element={<LawyerRequests />} /> */}
+              
+              {/* Placeholders for links to prevent crashing */}
+              {/* <Route path="/lawyer/cases" element={<div className="p-10">My Cases (Coming Soon)</div>} /> */}
+              {/* <Route path="/lawyer/tools" element={<div className="p-10">Drafting Tools (Coming Soon)</div>} /> */}
+              <Route path="/lawyer/schedule" element={<Schedule />} />
+            <Route
+              element={
+                <ProtectedRoute>
+                  <PoliceLayout>
+                    <Outlet />
+                  </PoliceLayout>
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/police-dashboard" element={<PoliceDashboard />} />
+              {/* Add other police pages here later */}
+            </Route>
 
             {/* ================= LAWYER PROTECTED ROUTES ================= */}
             <Route
@@ -73,6 +111,7 @@ function App() {
               <Route path="/map" element={<SafetyMap />} />
               <Route path="/chat" element={<Chat />} />
               <Route path="/cases" element={<MyCases />} />
+              <Route path="/complaint" element={<ComplaintPage/>} />
             </Route>
 
             {/* ================= PROFILE ROUTES ================= */}
