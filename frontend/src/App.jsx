@@ -23,6 +23,7 @@ import ProfileLayout from "./layouts/ProfileLayout";
 /* ================= CONTEXT ================= */
 import { ThemeProvider } from "./context/themeContext";
 import { AuthProvider } from "./context/Authcontext";
+import LawyerProfile from "./pages/dashboards/LawyerDetails";
 
 /* ================= ROUTE PROTECTION ================= */
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -94,6 +95,7 @@ function App() {
               <Route path="/complaint" element={<ComplaintPage/>} />
               <Route path="/emergency-logs" element={<EmergencyLogs/>} />
               <Route path="/find-lawyer" element={<FindLawyer/>} />
+              <Route path="/"
             </Route>
 
             {/* ================= PROFILE ROUTES ================= */}
