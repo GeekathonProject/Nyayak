@@ -1,12 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Scale, Sun, Moon, Menu } from 'lucide-react';
+import { Scale, Sun, Moon, Menu, X } from 'lucide-react';
 import { useTheme } from '../context/themeContext';
 
 const Navbar = () => {
   const { isDark, toggleTheme } = useTheme();
-  
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <motion.div 
@@ -14,7 +14,7 @@ const Navbar = () => {
       animate={{ y: 0, opacity: 1 }}
       className="fixed top-6 left-0 right-0 z-50 flex justify-center px-4"
     >
-      <nav className={`flex items-center justify-between px-6 py-3 rounded-full shadow-xl border backdrop-blur-md transition-all duration-300 w-full max-w-5xl ${
+      <nav className={`relative flex items-center justify-between px-6 py-3 rounded-full shadow-xl border backdrop-blur-md transition-all duration-300 w-full max-w-5xl ${
         isDark 
           ? 'bg-[#0B1120]/80 border-white/10 shadow-black/20' 
           : 'bg-white/80 border-white/40 shadow-orange-500/5'
@@ -53,19 +53,51 @@ const Navbar = () => {
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
 
-          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
+          {/* Desktop Buttons */}
+          <div className="hidden sm:flex items-center gap-3">
+            <Link to="/login" className={`text-sm font-semibold transition-colors ${isDark ? 'text-white hover:text-orange-400' : 'text-slate-700 hover:text-orange-600'}`}>
+              Log in
+            </Link>
+            <Link to="/signup" className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-full transition-transform hover:scale-105 shadow-lg shadow-orange-500/20">
+              Get Started
+            </Link>
+          </div>
 
-          {/* Buttons */}
-          {/* <Link to="/profile" className={`hidden sm:block text-sm font-semibold transition-colors ${isDark ? 'text-white hover:text-orange-400' : 'text-slate-700 hover:text-orange-600'}`}>
-            Profile
-          </Link> */}
-          <Link to="/login" className={`hidden sm:block text-sm font-semibold transition-colors ${isDark ? 'text-white hover:text-orange-400' : 'text-slate-700 hover:text-orange-600'}`}>
-            Log in
-          </Link>
-          <Link to="/signup" className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-full transition-transform hover:scale-105 shadow-lg shadow-orange-500/20">
-            Get Started
-          </Link>
+          {/* Mobile Menu Button */}
+          <button 
+            onClick={() => setIsOpen(!isOpen)}
+            className="md:hidden p-2 rounded-full"
+          >
+            {isOpen ? <X /> : <Menu />}
+          </button>
         </div>
+
+        {/* Mobile Dropdown */}
+        {isOpen && (
+          <div className={`absolute top-full mt-4 left-0 right-0 mx-4 rounded-2xl p-6 shadow-xl border md:hidden ${
+            isDark ? 'bg-[#0B1120] border-white/10' : 'bg-white border-slate-200'
+          }`}>
+            <div className="flex flex-col gap-4 text-sm font-medium">
+              {['Features', 'How It Works', 'Safety Map', 'About'].map((item) => (
+                <a 
+                  key={item}
+                  href={`#${item.toLowerCase().replace(/ /g, '-')}`}
+                  className="hover:text-orange-500"
+                  onClick={() => setIsOpen(false)}
+                >
+                  {item}
+                </a>
+              ))}
+              <hr className="border-slate-200 dark:border-slate-700" />
+              <Link to="/login" onClick={() => setIsOpen(false)}>
+                Log in
+              </Link>
+              <Link to="/signup" className="bg-orange-500 text-white px-4 py-2 rounded-lg text-center">
+                Get Started
+              </Link>
+            </div>
+          </div>
+        )}
       </nav>
     </motion.div>
   );
