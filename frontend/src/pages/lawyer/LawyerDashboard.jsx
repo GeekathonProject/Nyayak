@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { 
@@ -10,17 +10,14 @@ import {
   ArrowRight,
   MoreHorizontal,
   Gavel,
-  Briefcase
+  Briefcase,
+  Loader2,
+  CheckCircle,
+  AlertCircle
 } from "lucide-react";
+import { supabase } from "../../lib/supabase";
 
-// Mock Data
-const stats = [
-  { label: "Active Cases", value: "12", icon: Scale, color: "text-orange-700", bg: "bg-orange-100" },
-  { label: "Pending Requests", value: "5", icon: Users, color: "text-amber-700", bg: "bg-amber-100" },
-  { label: "Hours Billed", value: "34.5", icon: Clock, color: "text-slate-700", bg: "bg-slate-100" },
-  { label: "Success Rate", value: "92%", icon: TrendingUp, color: "text-emerald-700", bg: "bg-emerald-100" },
-];
-
+// Mock schedule data
 const schedule = [
   { time: "10:00 AM", title: "Bail Hearing: State vs. Kumar", type: "Court", location: "High Court, Room 402" },
   { time: "01:30 PM", title: "Client Consulation: Mrs. Desai", type: "Meeting", location: "Office / Zoom" },
@@ -29,6 +26,56 @@ const schedule = [
 
 const LawyerDashboard = () => {
   const navigate = useNavigate();
+  const [activeCases, setActiveCases] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch active cases
+        const { data: casesData, error: casesError } = await supabase
+          .from('cases')
+          .select('id, title, status, created_at, users:user_id(full_name, email)')
+          .eq('status', 'Active')
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        // Fetch pending requests (cases with "Payment Pending" status)
+        const { data: requestsData, error: requestsError } = await supabase
+          .from('cases')
+          .select('id, title, status, created_at, users:user_id(full_name, email)')
+          .eq('status', 'Payment Pending')
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (!casesError) setActiveCases(casesData || []);
+        if (!requestsError) setPendingRequests(requestsData || []);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('lawyer_dashboard')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cases' }, () => fetchData())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  const stats = [
+    { label: "Active Cases", value: activeCases.length.toString(), icon: Scale, color: "text-orange-700", bg: "bg-orange-100" },
+    { label: "Pending Requests", value: pendingRequests.length.toString(), icon: Users, color: "text-amber-700", bg: "bg-amber-100" },
+    { label: "Hours Billed", value: "34.5", icon: Clock, color: "text-slate-700", bg: "bg-slate-100" },
+    { label: "Success Rate", value: "92%", icon: TrendingUp, color: "text-emerald-700", bg: "bg-emerald-100" },
+  ];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -67,10 +114,10 @@ const LawyerDashboard = () => {
         ))}
       </div>
 
-      {/* 3. Split View: Schedule & Quick Actions */}
+      {/* 3. Split View: Schedule & Active Cases/Requests */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Left: Today's Schedule (2/3 width) - Standard Radius */}
+        {/* Left: Today's Schedule (2/3 width) */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
            <div className="flex items-center justify-between mb-6">
              <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-3">
@@ -160,6 +207,16 @@ const LawyerDashboard = () => {
              </button>
         </div>
 
+      </div>
+
+      {/* 4. Active Cases & Pending Requests */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* Active Cases */}
+        
+
+        {/* Pending Requests */}
+       
       </div>
     </div>
   );
