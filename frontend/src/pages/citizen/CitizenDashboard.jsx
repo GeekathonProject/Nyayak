@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { 
   Search, 
   Send, 
@@ -13,12 +13,15 @@ import {
   Sparkles,
   ArrowRight
 } from "lucide-react";
+import CitizenCrimeMap from "./CitizenCrimeMap";
 
 const CitizenDashboard = ({ user }) => {
   const userName = user?.user_metadata?.full_name || "Citizen";
+  const [showCrimeMap, setShowCrimeMap] = useState(false);
 
   return (
     <div className="space-y-6 pb-10 font-sans text-slate-900 dark:text-white transition-colors duration-300">
+      <CitizenCrimeMap isOpen={showCrimeMap} onClose={() => setShowCrimeMap(false)} />
       
       {/* 1. HERO SECTION - UNIFIED BLOCK 
           Matches image_a5a3d6.png exactly.
@@ -119,6 +122,7 @@ const CitizenDashboard = ({ user }) => {
           iconBg="bg-emerald-600 shadow-emerald-600/20"
           btnText="View Heatmap"
           btnClass="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+          onClick={() => setShowCrimeMap(true)}
         />
       </div>
 
@@ -180,7 +184,10 @@ const CitizenDashboard = ({ user }) => {
               }}></div>
 
               <div className="absolute inset-0 flex items-center justify-center">
-                 <button className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md border border-slate-200 dark:border-slate-700 flex items-center gap-2 hover:scale-105 transition-transform">
+                 <button 
+                   onClick={() => setShowCrimeMap(true)}
+                   className="bg-white dark:bg-slate-800 text-slate-900 dark:text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md border border-slate-200 dark:border-slate-700 flex items-center gap-2 hover:scale-105 transition-transform"
+                 >
                    <MapPin className="w-4 h-4 text-emerald-500" /> View Full Map
                  </button>
               </div>
@@ -194,7 +201,7 @@ const CitizenDashboard = ({ user }) => {
 
 // --- REUSABLE COMPONENT: FEATURE CARD ---
 // Designed to look flat and integrated, not floating
-const FeatureCard = ({ title, desc, icon, iconBg, btnText, btnClass }) => (
+const FeatureCard = ({ title, desc, icon, iconBg, btnText, btnClass, onClick }) => (
   <div className="bg-white dark:bg-[#111827] rounded-[24px] p-6 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600 transition-all flex flex-col justify-between h-[200px]">
     <div>
       <div className={`w-12 h-12 rounded-xl ${iconBg} flex items-center justify-center mb-4`}>
@@ -204,7 +211,10 @@ const FeatureCard = ({ title, desc, icon, iconBg, btnText, btnClass }) => (
       <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">{desc}</p>
     </div>
     
-    <button className={`w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors ${btnClass}`}>
+    <button 
+      onClick={onClick}
+      className={`w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors ${btnClass}`}
+    >
       {btnText} <ChevronRight className="w-4 h-4" />
     </button>
   </div>

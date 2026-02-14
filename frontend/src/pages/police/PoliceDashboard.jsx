@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline, useMapEvents, Circle, Rectangle } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { supabase } from "../../lib/supabase"; 
-import { Navigation, MapPin, CheckCircle, ArrowLeft, Phone, User, Siren } from "lucide-react";
+import { Navigation, MapPin, CheckCircle, ArrowLeft, Phone, User, Siren, AlertTriangle, Zap } from "lucide-react";
 
 // --- ICONS ---
 const createUnitIcon = () => L.divIcon({
@@ -37,6 +37,205 @@ const MapUpdater = ({ center, zoom }) => {
   return null;
 };
 
+// Custom Heatmap Layer Component using Canvas
+const HeatmapDisplay = ({ locations, zoom }) => {
+  const map = useMap();
+  const canvasRef = useRef(null);
+  const overlayRef = useRef(null);
+  const [hoveredZones, setHoveredZones] = useState([]);
+
+  useEffect(() => {
+    if (!map || !locations || locations.length === 0) return;
+
+    // Remove old overlay if exists
+    if (overlayRef.current) {
+      map.removeLayer(overlayRef.current);
+    }
+
+    // Create a custom overlay using simple visual indicators
+    const bounds = map.getBounds();
+    const padding = 0.01;
+    const visibleMapBounds = [
+      [bounds.getSouth() - padding, bounds.getWest() - padding],
+      [bounds.getNorth() + padding, bounds.getEast() + padding],
+    ];
+
+    // Group locations by proximity to create heatmap intensity
+    // Grid size: ~55m at zoom 15, ~111m at zoom 14, ~222m at zoom 13 (street/neighborhood level)
+    const gridSize = 0.0005 * Math.pow(2, 15 - zoom);
+    const grid = {};
+
+    locations.forEach((loc) => {
+      const key = `${Math.floor(loc.latitude / gridSize)}-${Math.floor(loc.longitude / gridSize)}`;
+      if (!grid[key]) {
+        grid[key] = { lat: loc.latitude, lng: loc.longitude, dangerous: 0, safe: 0, locs: [] };
+      }
+      if (loc.type === 'dangerous') {
+        grid[key].dangerous += 1;
+      } else {
+        grid[key].safe += 1;
+      }
+      grid[key].locs.push(loc);
+    });
+
+    // Create rectangles for heatmap visualization
+    const gridLayers = Object.values(grid).map((cell) => {
+      const total = cell.dangerous + cell.safe;
+      const dangerRatio = cell.dangerous / total;
+      
+      // Determine color based on danger ratio
+      let color, opacity, weight;
+      if (dangerRatio > 0.7) {
+        color = '#dc2626'; // Red - Dangerous
+        opacity = 0.3 + (dangerRatio * 0.4);
+        weight = 2;
+      } else if (dangerRatio > 0.4) {
+        color = '#f59e0b'; // Orange - Mixed
+        opacity = 0.2 + (dangerRatio * 0.3);
+        weight = 1;
+      } else if (dangerRatio > 0) {
+        color = '#eab308'; // Yellow - Mostly Safe
+        opacity = 0.15;
+        weight = 1;
+      } else {
+        color = '#22c55e'; // Green - Safe
+        opacity = 0.25;
+        weight = 1;
+      }
+
+      const bounds = [
+        [cell.lat - gridSize / 2, cell.lng - gridSize / 2],
+        [cell.lat + gridSize / 2, cell.lng + gridSize / 2],
+      ];
+
+      return (
+        <Rectangle
+          key={`${cell.lat}-${cell.lng}`}
+          bounds={bounds}
+          pathOptions={{
+            color: color,
+            weight: weight,
+            opacity: 0.2,
+            fillColor: color,
+            fillOpacity: opacity,
+          }}
+          popup={`<strong>${cell.dangerous} Dangerous, ${cell.safe} Safe</strong>`}
+        >
+          <Popup>
+            <div className="text-sm">
+              <strong>Zone Heat</strong>
+              <p>Dangerous: {cell.dangerous}</p>
+              <p>Safe: {cell.safe}</p>
+              <p>Ratio: {(dangerRatio * 100).toFixed(0)}% Dangerous</p>
+            </div>
+          </Popup>
+        </Rectangle>
+      );
+    });
+
+    // Group and render all heatmap rectangles
+    const heatGroup = L.featureGroup();
+    gridLayers.forEach(() => {}); // Just ensure they're rendered by React
+
+    return () => {
+      if (overlayRef.current && map) {
+        try {
+          map.removeLayer(overlayRef.current);
+        } catch (e) {
+          // Layer already removed
+        }
+      }
+    };
+  }, [locations, map, zoom]);
+
+  // Return rectangles to be rendered by MapContainer
+  if (!locations || locations.length === 0) return null;
+
+  // Grid size: ~55m at zoom 15, ~111m at zoom 14, ~222m at zoom 13 (street/neighborhood level)
+  const gridSize = 0.0005 * Math.pow(2, 15 - zoom);
+  const grid = {};
+
+  locations.forEach((loc) => {
+    const key = `${Math.floor(loc.latitude / gridSize)}-${Math.floor(loc.longitude / gridSize)}`;
+    if (!grid[key]) {
+      grid[key] = { lat: loc.latitude, lng: loc.longitude, dangerous: 0, safe: 0 };
+    }
+    if (loc.type === 'dangerous') {
+      grid[key].dangerous += 1;
+    } else {
+      grid[key].safe += 1;
+    }
+  });
+
+  return (
+    <>
+      {Object.values(grid).map((cell) => {
+        const total = cell.dangerous + cell.safe;
+        const dangerRatio = cell.dangerous / total;
+        
+        let color, opacity;
+        if (dangerRatio > 0.7) {
+          color = '#dc2626';
+          opacity = 0.3 + dangerRatio * 0.4;
+        } else if (dangerRatio > 0.4) {
+          color = '#f59e0b';
+          opacity = 0.2 + dangerRatio * 0.3;
+        } else if (dangerRatio > 0) {
+          color = '#eab308';
+          opacity = 0.15;
+        } else {
+          color = '#22c55e';
+          opacity = 0.25;
+        }
+
+        const bounds = [
+          [cell.lat - gridSize / 2, cell.lng - gridSize / 2],
+          [cell.lat + gridSize / 2, cell.lng + gridSize / 2],
+        ];
+
+        return (
+          <Rectangle
+            key={`${cell.lat}-${cell.lng}`}
+            bounds={bounds}
+            pathOptions={{
+              color: color,
+              weight: 1,
+              opacity: 0.2,
+              fillColor: color,
+              fillOpacity: opacity,
+            }}
+            popup={`<strong>${cell.dangerous} Dangerous, ${cell.safe} Safe</strong>`}
+          >
+            <Popup>
+              <div className="text-sm">
+                <strong>Zone Heat</strong>
+                <p>Dangerous: {cell.dangerous}</p>
+                <p>Safe: {cell.safe}</p>
+              </div>
+            </Popup>
+          </Rectangle>
+        );
+      })}
+    </>
+  );
+};
+
+
+// Map Event Listener Component
+const MapClickListener = ({ onMapClick, markingMode }) => {
+  useMapEvents({
+    click(e) {
+      if (markingMode) {
+        onMapClick({
+          lat: e.latlng.lat,
+          lng: e.latlng.lng,
+        });
+      }
+    },
+  });
+  return null;
+};
+
 const UNIT_LOCATION = { lat: 22.5726, lng: 88.3639 }; 
 
 const PoliceDashboard = () => {
@@ -46,6 +245,12 @@ const PoliceDashboard = () => {
   const [mapCenter, setMapCenter] = useState([UNIT_LOCATION.lat, UNIT_LOCATION.lng]);
   const [zoomLevel, setZoomLevel] = useState(13);
   const [isResponding, setIsResponding] = useState(false);
+  
+  // New state for location marking
+  const [markedLocations, setMarkedLocations] = useState([]);
+  const [markingMode, setMarkingMode] = useState(null); // 'dangerous', 'safe', or null
+  const [tempMarker, setTempMarker] = useState(null);
+  const [showHeatmap, setShowHeatmap] = useState(true);
 
   // --- DATA FETCHING ---
   useEffect(() => {
@@ -57,8 +262,18 @@ const PoliceDashboard = () => {
         .order('created_at', { ascending: false });
       if (data) setIncidents(data);
     };
+    
+    // Fetch marked locations
+    const fetchMarkedLocations = async () => {
+      const { data } = await supabase
+        .from('location_safety')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (data) setMarkedLocations(data);
+    };
 
     fetchLiveIncidents();
+    fetchMarkedLocations();
 
     const channel = supabase
       .channel('police_dashboard_map')
@@ -67,6 +282,9 @@ const PoliceDashboard = () => {
         if (payload.eventType === 'INSERT') {
            toast.error(`🚨 NEW SOS: ${payload.new.topic || payload.new.type}`, { position: "top-right", theme: "colored", icon: <Siren className="animate-pulse" /> });
         }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'location_safety' }, (payload) => {
+        fetchMarkedLocations();
       })
       .subscribe();
 
@@ -107,6 +325,52 @@ const PoliceDashboard = () => {
     }
   };
 
+  // New handlers for location marking
+  const handleMarkingModeToggle = (mode) => {
+    if (markingMode === mode) {
+      setMarkingMode(null);
+      setTempMarker(null);
+      toast.info("Marking mode disabled");
+    } else {
+      setMarkingMode(mode);
+      setTempMarker(null);
+      toast.info(`Click on map to mark ${mode === 'dangerous' ? 'dangerous' : 'safe'} location`);
+    }
+  };
+
+  const handleMapClick = async (coords) => {
+    if (!markingMode) return;
+    
+    setTempMarker(coords);
+    
+    // Save to database
+    const { error } = await supabase.from('location_safety').insert([{
+      latitude: coords.lat,
+      longitude: coords.lng,
+      type: markingMode, // 'dangerous' or 'safe'
+      marked_by: 'police_officer', // Can be enhanced with user info
+      marked_at: new Date().toISOString(),
+    }]);
+    
+    if (!error) {
+      toast.success(`Location marked as ${markingMode}`);
+      setTempMarker(null);
+      setMarkingMode(null);
+    } else {
+      toast.error("Failed to mark location");
+    }
+  };
+
+  const handleRemoveLocation = async (locationId) => {
+    const { error } = await supabase.from('location_safety').delete().eq('id', locationId);
+    
+    if (!error) {
+      toast.success("Location removed");
+    } else {
+      toast.error("Failed to remove location");
+    }
+  };
+
   return (
     <div className="h-full w-full flex flex-col lg:flex-row relative">
       <ToastContainer limit={3} />
@@ -116,10 +380,47 @@ const PoliceDashboard = () => {
          <MapContainer center={mapCenter} zoom={zoomLevel} style={{ height: "100%", width: "100%" }} zoomControl={false}>
             <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
             <MapUpdater center={mapCenter} zoom={zoomLevel} />
+            <MapClickListener onMapClick={handleMapClick} markingMode={markingMode} />
+            
+            {/* Heatmap Display */}
+            {showHeatmap && markedLocations.length > 0 && (
+              <HeatmapDisplay locations={markedLocations} zoom={zoomLevel} />
+            )}
             
             <Marker position={[UNIT_LOCATION.lat, UNIT_LOCATION.lng]} icon={createUnitIcon()}>
                <Popup><strong className="text-blue-700">UNIT 402</strong><br/>HQ Location</Popup>
             </Marker>
+
+            {/* Display marked locations as circles */}
+            {markedLocations.map((loc) => (
+              <Circle
+                key={loc.id}
+                center={[loc.latitude, loc.longitude]}
+                radius={100}
+                pathOptions={{
+                  color: loc.type === 'dangerous' ? '#ef4444' : '#22c55e',
+                  fillColor: loc.type === 'dangerous' ? '#fca5a5' : '#86efac',
+                  fillOpacity: 0.6,
+                  weight: 2,
+                }}
+                popup={`<div class="text-center"><strong>${loc.type === 'dangerous' ? '⚠️ Dangerous Zone' : '✅ Safe Zone'}</strong><br/>${new Date(loc.marked_at).toLocaleDateString()}</div>`}
+              >
+                <Popup>
+                  <div className="text-center">
+                    <strong className={loc.type === 'dangerous' ? 'text-red-600' : 'text-green-600'}>
+                      {loc.type === 'dangerous' ? '⚠️ Dangerous Zone' : '✅ Safe Zone'}
+                    </strong>
+                    <p className="text-xs text-slate-500 mt-1">{new Date(loc.marked_at).toLocaleString()}</p>
+                    <button
+                      onClick={() => handleRemoveLocation(loc.id)}
+                      className="mt-2 px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </Popup>
+              </Circle>
+            ))}
 
             {incidents.map((inc) => (
               <Marker 
@@ -142,6 +443,45 @@ const PoliceDashboard = () => {
          <div className="absolute top-4 left-4 z-[500] bg-white/90 backdrop-blur border border-slate-200 p-3 rounded-lg shadow-sm flex flex-col gap-2">
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-600"><div className="w-2.5 h-2.5 bg-blue-600 rounded-full border border-white shadow"></div>Your Unit</div>
             <div className="flex items-center gap-2 text-xs font-semibold text-slate-600"><div className="w-2.5 h-2.5 bg-red-600 rounded-full border border-white shadow"></div>Active Incident</div>
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-600"><div className="w-2.5 h-2.5 bg-red-400 rounded-full border border-white shadow"></div>Dangerous Zone</div>
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-600"><div className="w-2.5 h-2.5 bg-green-400 rounded-full border border-white shadow"></div>Safe Zone</div>
+         </div>
+         
+         {/* Marking Controls */}
+         <div className="absolute bottom-4 right-4 z-[500] flex gap-2">
+            <button
+              onClick={() => handleMarkingModeToggle('dangerous')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+                markingMode === 'dangerous'
+                  ? 'bg-red-600 text-white shadow-lg'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:shadow-md'
+              }`}
+            >
+              <AlertTriangle className="w-4 h-4" />
+              Mark Dangerous
+            </button>
+            <button
+              onClick={() => handleMarkingModeToggle('safe')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+                markingMode === 'safe'
+                  ? 'bg-green-600 text-white shadow-lg'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:shadow-md'
+              }`}
+            >
+              <CheckCircle className="w-4 h-4" />
+              Mark Safe
+            </button>
+            <button
+              onClick={() => setShowHeatmap(!showHeatmap)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+                showHeatmap
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:shadow-md'
+              }`}
+            >
+              <Zap className="w-4 h-4" />
+              Heatmap
+            </button>
          </div>
       </div>
 
@@ -176,6 +516,40 @@ const PoliceDashboard = () => {
                     {incident.status === 'dispatching' && <div className="mt-2 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded inline-block">Units En Route</div>}
                   </div>
                 ))
+              )}
+              
+              {/* Marked Locations Section */}
+              {markedLocations.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-slate-200">
+                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-3">Marked Zones ({markedLocations.length})</h3>
+                  <div className="space-y-2">
+                    {markedLocations.map((loc) => (
+                      <div key={loc.id} className={`p-3 rounded-lg border text-sm ${
+                        loc.type === 'dangerous' 
+                          ? 'bg-red-50 border-red-200' 
+                          : 'bg-green-50 border-green-200'
+                      }`}>
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-lg ${loc.type === 'dangerous' ? '⚠️' : '✅'}`}></span>
+                            <div>
+                              <p className={`font-bold text-xs ${loc.type === 'dangerous' ? 'text-red-700' : 'text-green-700'}`}>
+                                {loc.type === 'dangerous' ? 'Dangerous Zone' : 'Safe Zone'}
+                              </p>
+                              <p className="text-xs text-slate-500">{new Date(loc.marked_at).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleRemoveLocation(loc.id)}
+                            className="text-xs text-slate-400 hover:text-red-600 transition-colors"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           </>
