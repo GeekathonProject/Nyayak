@@ -237,7 +237,7 @@ Guidelines:
 
     tok, mdl = get_llm()
     import torch
-    inputs = tok(prompt, return_tensors="pt").to(device)
+    inputs = tok(prompt, return_tensors="pt").to(get_device())
 
     with torch.no_grad():
         outputs = mdl.generate(
