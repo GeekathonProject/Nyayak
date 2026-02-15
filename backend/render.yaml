@@ -6,7 +6,7 @@ services:
     
     # Build & Start commands
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "cd app && uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 75"
     
     # Environment variables
     envVars:
