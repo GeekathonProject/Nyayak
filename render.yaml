@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: nyayak-backend
+    rootDir: backend
+    runtime: python
+    pythonVersion: 3.11
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    plan: free
+    region: oregon
+    healthCheckPath: /
+  - type: static
+    name: nyayak-frontend
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
