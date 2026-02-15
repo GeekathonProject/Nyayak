@@ -1,6 +1,5 @@
 import os
 import re
-import torch
 from typing import List
 
 try:
@@ -8,15 +7,20 @@ try:
 except ImportError:
     fitz = None
 
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
-
-
 # ==========================================
 # DEVICE & PATH SETUP
 # ==========================================
-device = "cuda" if torch.cuda.is_available() else "cpu"
+_device = None
+
+def get_device():
+    global _device
+    if _device is None:
+        try:
+            import torch as _t
+            _device = "cuda" if _t.cuda.is_available() else "cpu"
+        except Exception:
+            _device = "cpu"
+    return _device
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_PATH = os.path.join(BASE_DIR, "..", "faiss_index")
@@ -26,36 +30,55 @@ if not os.path.exists(INDEX_PATH):
 
 
 # ==========================================
-# LOAD EMBEDDING MODEL
+# LAZY EMBEDDINGS & VECTORSTORE
 # ==========================================
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2",
-    model_kwargs={"device": device}
-)
+embeddings = None
 
 vectorstore = None
-if os.path.exists(INDEX_PATH):
-    vectorstore = FAISS.load_local(
-        INDEX_PATH,
-        embeddings,
-        allow_dangerous_deserialization=True
-    )
+
+def get_embeddings():
+    global embeddings
+    if embeddings is None:
+        from langchain_huggingface import HuggingFaceEmbeddings
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2"
+        )
+    return embeddings
+
+def get_vectorstore():
+    global vectorstore
+    if vectorstore is None and os.path.exists(INDEX_PATH):
+        from langchain_community.vectorstores import FAISS
+        vectorstore = FAISS.load_local(
+            INDEX_PATH,
+            get_embeddings(),
+            allow_dangerous_deserialization=True
+        )
+    return vectorstore
 
 
 # ==========================================
-# LOAD LLM (ONLY ONCE)
+# LAZY LLM
 # ==========================================
-MODEL_NAME = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+MODEL_NAME = os.environ.get("NYAYAK_MODEL", "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
 
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+tokenizer = None
+model = None
 
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
-    torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-    device_map="auto" if device == "cuda" else None,
-).to(device)
-
-model.eval()
+def get_llm():
+    global tokenizer, model
+    if tokenizer is None or model is None:
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        import torch
+        model_name = os.environ.get("NYAYAK_MODEL", MODEL_NAME)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16 if get_device() == "cuda" else torch.float32,
+            device_map="auto" if get_device() == "cuda" else None,
+        ).to(get_device())
+        model.eval()
+    return tokenizer, model
 
 
 # ==========================================
@@ -104,11 +127,12 @@ def get_legal_term_context(query: str) -> str:
 
 
 def retrieve_faiss_context(query: str, k: int = 3):
-    if not vectorstore:
+    vs = get_vectorstore()
+    if not vs:
         return [], []
 
     try:
-        docs_with_scores = vectorstore.similarity_search_with_score(query, k=k)
+        docs_with_scores = vs.similarity_search_with_score(query, k=k)
         filtered_docs = [(doc, score) for doc, score in docs_with_scores if score < 1.2]
 
         texts = [doc.page_content for doc, _ in filtered_docs]
@@ -211,20 +235,22 @@ Guidelines:
 
     prompt = f"<|system|>\n{system_prompt}</s>\n<|user|>\nContext:\n{context}\n\nQuestion: {query}</s>\n<|assistant|>\n"
 
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+    tok, mdl = get_llm()
+    import torch
+    inputs = tok(prompt, return_tensors="pt").to(device)
 
     with torch.no_grad():
-        outputs = model.generate(
+        outputs = mdl.generate(
             **inputs,
             max_new_tokens=max_tokens,
             temperature=0.2,
             top_p=0.8,
             repetition_penalty=1.2,
-            eos_token_id=tokenizer.eos_token_id
+            eos_token_id=tok.eos_token_id
         )
 
     generated = outputs[0][inputs["input_ids"].shape[-1]:]
-    answer = tokenizer.decode(generated, skip_special_tokens=True).strip()
+    answer = tok.decode(generated, skip_special_tokens=True).strip()
 
     # ==========================================
     # 5️⃣ CLEAN OUTPUT
