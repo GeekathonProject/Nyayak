@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Scale, ArrowRight } from 'lucide-react';
 import { useTheme } from '../context/themeContext';
-// import FeatureGrid from './FeatureGrid'; // Import the new component
 
 const HeroSection = () => {
   const { isDark } = useTheme();
@@ -12,20 +11,6 @@ const HeroSection = () => {
     <div className="font-sans">
       <main className="relative flex flex-col items-center justify-center pt-36 md:pt-48 pb-20 max-w-[100vw] overflow-hidden">
         
-        {/* Badge */}
-        {/* <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border mb-8 backdrop-blur-md ${isDark ? 'bg-indigo-950/30 border-indigo-500/30 text-indigo-300' : 'bg-white/60 border-orange-200 text-orange-800 shadow-sm'}`}
-        >
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
-          </span>
-          <span className="text-xs font-bold tracking-wide uppercase">Official Government Portal</span>
-        </motion.div> */}
-
         {/* Headline */}
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
@@ -65,34 +50,87 @@ const HeroSection = () => {
           </Link>
         </motion.div>
 
+        {/* Auto-Playing AI Card */}
         <AIFeatureCard isDark={isDark} />
       </main>
-
-      {/* --- NEW CLEAN FEATURE GRID --- */}
-      {/* <FeatureGrid /> */}
     </div>
   );
 };
 
-// --- KEEP THE AI CARD ---
+// --- SINGLE CHAT VIEW (NO SCROLLING) ---
 const AIFeatureCard = ({ isDark }) => {
   const [inputValue, setInputValue] = useState("");
-  const [messages, setMessages] = useState([
-    { type: 'ai', text: "Namaste. I am NyayaSahayak's digital assistant. How may I aid your legal query today?" }
-  ]);
+  
+  // 1. Always start with just the Welcome message
+  const WELCOME_MSG = { type: 'ai', text: "Namaste. I am NyayaSahayak's digital assistant. How may I aid your legal query today?" };
+  
+  const [messages, setMessages] = useState([WELCOME_MSG]);
   const [isTyping, setIsTyping] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
 
-  const handleSend = () => {
-    if (!inputValue.trim()) return;
-    setMessages([...messages, { type: 'user', text: inputValue }]);
-    setInputValue("");
-    setIsTyping(true);
+  const SCRIPT = [
+    { type: 'user', text: "Can I file an FIR online?" },
+    { type: 'ai', text: "Yes. Under the CCTNS e-FIR system, you can file complaints for cognizable offenses like theft or cybercrime via the official portal." },
+    // PAUSE HERE (Index 2) - This dummy entry triggers the reset
+    { type: 'reset' }, 
+    { type: 'user', text: "What documents do I need for online FIR?" },
+    { type: 'ai', text: "You typically need: 1. A valid ID proof (Aadhar/Pan) \n2. Incident details (Date, Time, Location)." }
+  ];
 
-    setTimeout(() => {
-      setMessages(prev => [...prev, { type: 'ai', text: "I understand. According to the Registration Act, 1908, a rental agreement for 11 months does not strictly require registration. Shall I draft a standard compliant template for you?" }]);
-      setIsTyping(false);
-    }, 1500);
-  };
+  useEffect(() => {
+    let timeout;
+    
+    const runScript = async () => {
+      // Loop back to start if finished
+      if (currentStep >= SCRIPT.length) {
+        timeout = setTimeout(() => {
+          setMessages([WELCOME_MSG]);
+          setCurrentStep(0);
+        }, 4000);
+        return;
+      }
+
+      const action = SCRIPT[currentStep];
+
+      // --- LOGIC: RESET SCREEN ---
+      if (action.type === 'reset') {
+        timeout = setTimeout(() => {
+          setMessages([WELCOME_MSG]); // Clear old Q&A, keep Welcome
+          setCurrentStep(prev => prev + 1);
+        }, 3000); // Read time before clearing
+        return;
+      }
+
+      // --- LOGIC: USER TYPING ---
+      if (action.type === 'user') {
+        for (let i = 0; i <= action.text.length; i++) {
+          setInputValue(action.text.slice(0, i));
+          await new Promise(r => setTimeout(r, 40));
+        }
+        await new Promise(r => setTimeout(r, 400)); 
+
+        // Add User Message (Keep Welcome, Add User)
+        setMessages([WELCOME_MSG, { type: 'user', text: action.text }]);
+        setInputValue("");
+        setIsTyping(true);
+        setCurrentStep(prev => prev + 1);
+      
+      // --- LOGIC: AI RESPONDING ---
+      } else if (action.type === 'ai') {
+        await new Promise(r => setTimeout(r, 1500)); 
+        setIsTyping(false);
+        
+        // Add AI Message (Keep Welcome + User, Add AI)
+        setMessages(prev => [...prev, { type: 'ai', text: action.text }]);
+        
+        // Immediately move to next step (which might be a Reset)
+        setCurrentStep(prev => prev + 1);
+      }
+    };
+
+    runScript();
+    return () => clearTimeout(timeout);
+  }, [currentStep]);
 
   return (
     <motion.div
@@ -102,41 +140,52 @@ const AIFeatureCard = ({ isDark }) => {
       className={`w-full max-w-4xl p-1 rounded-[2.5rem] bg-gradient-to-br shadow-2xl z-20 ${isDark ? 'from-white/10 to-white/0 shadow-orange-900/20' : 'from-white/60 to-white/20 shadow-orange-500/10'}`}
     >
       <div className={`rounded-[2.4rem] overflow-hidden border backdrop-blur-xl h-[450.1px] flex flex-col ${isDark ? 'bg-[#0F172A]/80 border-white/10' : 'bg-white/60 border-white/50'}`}>
-        {/* Chat Header */}
+        
+        {/* Header */}
         <div className={`p-5 border-b flex items-center justify-between ${isDark ? 'border-white/10 bg-white/5' : 'border-black/5 bg-white/40'}`}>
           <div className="flex items-center gap-3">
-             <Scale className={`w-5 h-5 ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
+             <div className={`p-1.5 rounded-lg ${isDark ? 'bg-orange-500/10' : 'bg-orange-100'}`}>
+               <Scale className={`w-5 h-5 ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
+             </div>
              <span className={`text-sm font-bold tracking-wide ${isDark ? 'text-white' : 'text-slate-800'}`}>LEGAL ASSISTANT</span>
           </div>
-          <div className={`text-xs font-medium px-3 py-1 rounded-full ${isDark ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-700'}`}>Online</div>
+          <div className={`text-xs font-medium px-3 py-1 rounded-full flex items-center gap-1.5 ${isDark ? 'bg-green-500/20 text-green-300' : 'bg-green-100 text-green-700'}`}>
+             <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse"></span>
+             Online
+          </div>
         </div>
 
-        {/* Chat Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <AnimatePresence>
+        {/* Chat Body (NO SCROLLBAR, OVERFLOW HIDDEN) */}
+        <div className="flex-1 overflow-hidden p-6 space-y-6 flex flex-col justify-end">
+          <AnimatePresence mode='wait'>
             {messages.map((msg, index) => (
               <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
+                key={index + msg.text.slice(0,5)} // Unique key forces re-render animation
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
                 className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <div className={`max-w-[85%] p-5 rounded-2xl text-sm leading-relaxed ${
+                <div className={`max-w-[85%] p-5 rounded-2xl text-sm leading-relaxed shadow-sm ${
                   msg.type === 'user' 
                     ? 'bg-orange-600 text-white rounded-br-none font-medium' 
-                    : isDark ? 'bg-slate-800/80 text-slate-200 rounded-bl-none' : 'bg-white text-slate-700 shadow-sm rounded-bl-none border border-black/5'
+                    : isDark ? 'bg-slate-800/80 text-slate-200 rounded-bl-none border border-white/5' : 'bg-white text-slate-700 rounded-bl-none border border-black/5'
                 }`}>
-                  {msg.text}
+                  {msg.text.split('\n').map((line, i) => (
+                    <p key={i} className={i > 0 ? 'mt-2' : ''}>{line}</p>
+                  ))}
                 </div>
               </motion.div>
             ))}
           </AnimatePresence>
+          
+          {/* Typing Indicator */}
           {isTyping && (
              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
-               <div className={`p-4 rounded-2xl rounded-bl-none flex gap-2 ${isDark ? 'bg-slate-800/80' : 'bg-white border border-black/5'}`}>
-                  <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce"></span>
-                  <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce delay-75"></span>
-                  <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce delay-150"></span>
+               <div className={`p-4 rounded-2xl rounded-bl-none flex gap-1.5 ${isDark ? 'bg-slate-800/80' : 'bg-white border border-black/5'}`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:-0.3s]"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:-0.15s]"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce"></span>
                </div>
              </motion.div>
           )}
@@ -147,19 +196,21 @@ const AIFeatureCard = ({ isDark }) => {
           <div className="relative">
             <input
               type="text"
+              readOnly
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
               placeholder="Ask a legal question..."
-              className={`w-full pl-5 pr-14 py-4 rounded-2xl outline-none transition-all font-medium ${
+              className={`w-full pl-5 pr-14 py-4 rounded-2xl outline-none transition-all font-medium cursor-default ${
                 isDark 
                   ? 'bg-slate-900/50 text-white placeholder-slate-500 border border-white/10 focus:border-orange-500/50' 
                   : 'bg-white text-slate-800 placeholder-slate-400 border border-slate-200 focus:border-orange-500/50 shadow-sm'
               }`}
             />
             <button 
-              onClick={handleSend}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-all shadow-md active:scale-95"
+              className={`absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-xl transition-all shadow-md ${
+                inputValue 
+                ? 'bg-orange-600 text-white hover:bg-orange-700' 
+                : 'bg-slate-700/10 text-slate-400 cursor-not-allowed'
+              }`}
             >
               <Send className="w-5 h-5" />
             </button>
