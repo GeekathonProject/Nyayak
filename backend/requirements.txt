@@ -14,7 +14,7 @@ transformers>=4.40.0,<4.46
 torch>=2.9,<2.11
 sentence-transformers>=2.7.0,<3.0
 # Only one entry for FAISS (stable Linux version)
-faiss-cpu==1.9.0.post1
+faiss-cpu>=1.12.0,<1.14
 
 # RETRIEVAL AUGMENTED GENERATION (RAG)
 langchain==1.2.10
