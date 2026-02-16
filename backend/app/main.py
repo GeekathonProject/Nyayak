@@ -96,27 +96,28 @@ async def ask_file(query: str = Form(...), file: UploadFile = File(None)):
     result = ask_question_with_doc(query, uploaded_text)
     return result
 
-
 @app.post("/chat")
 async def chat(request: Request, query: str = Form(None), file: UploadFile = File(None)):
     from app.rag.pipeline import ask_question_with_doc
     ct = request.headers.get("content-type", "")
-    
+
+    # JSON body
     if "application/json" in ct:
         data = await request.json()
         q = (data.get("query") or "").strip()
         if not q:
             raise HTTPException(status_code=400, detail="Query cannot be empty.")
         return ask_question_with_doc(q, None)
-    
+
+    # Form-data
     q = (query or "").strip()
     if not q:
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
-    
+
     uploaded_text = None
     if file:
         if not file.filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=400, detail="Only PDF files are supported.")
         uploaded_text = extract_pdf_text(file)
-        
+
     return ask_question_with_doc(q, uploaded_text)
