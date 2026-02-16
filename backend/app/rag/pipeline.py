@@ -3,8 +3,8 @@ import re
 from dotenv import load_dotenv
 from google import genai
 from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.embeddings import Embeddings
 
 # ==========================================
 # LOAD ENV
@@ -31,15 +31,34 @@ UPLOADED_INDEX_PATH = os.path.join(BASE_DIR, "..", "..", "faiss_uploaded")
 os.makedirs(UPLOADED_INDEX_PATH, exist_ok=True)
 
 # ==========================================
-# EMBEDDINGS
+# EMBEDDINGS (Low-memory: use Google GenAI API instead of local Torch)
 # ==========================================
-embeddings = None
+class GoogleGenAIEmbeddings(Embeddings):
+    def __init__(self, model: str = "text-embedding-004", dimension: int | None = None):
+        self.model = model
+        self.dimension = dimension
+
+    def _embed(self, text: str):
+        res = client.models.embed_content(
+            model=self.model,
+            content=text,
+            output_dimensionality=self.dimension
+        )
+        return res.embeddings[0].values
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._embed(t) for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed(text)
+
+_embeddings = None
 
 def get_embeddings():
-    global embeddings
-    if embeddings is None:
-        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    return embeddings
+    global _embeddings
+    if _embeddings is None:
+        _embeddings = GoogleGenAIEmbeddings()
+    return _embeddings
 
 # ==========================================
 # LOAD BASE INDEX
@@ -73,8 +92,8 @@ def build_uploaded_index(text: str):
         return
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
+        chunk_size=800,
+        chunk_overlap=100
     )
 
     chunks = splitter.split_text(text)
@@ -100,13 +119,13 @@ def retrieve_context(query: str):
 
     # Priority 1: Uploaded PDF
     if uploaded_store:
-        docs = uploaded_store.similarity_search(query, k=3)
+        docs = uploaded_store.similarity_search(query, k=2)
         return [d.page_content for d in docs], "uploaded"
 
     # Priority 2: Base Knowledge
     base = get_base_store()
     if base:
-        docs = base.similarity_search(query, k=3)
+        docs = base.similarity_search(query, k=2)
         return [d.page_content for d in docs], "base"
 
     return [], "none"
