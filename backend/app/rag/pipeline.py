@@ -33,20 +33,28 @@ os.makedirs(UPLOADED_INDEX_PATH, exist_ok=True)
 # ==========================================
 # EMBEDDINGS
 # ==========================================
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+embeddings = None
+
+def get_embeddings():
+    global embeddings
+    if embeddings is None:
+        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    return embeddings
 
 # ==========================================
 # LOAD BASE INDEX
 # ==========================================
 base_store = None
-if os.path.exists(BASE_INDEX_PATH):
-    base_store = FAISS.load_local(
-        BASE_INDEX_PATH,
-        embeddings,
-        allow_dangerous_deserialization=True
-    )
+
+def get_base_store():
+    global base_store
+    if base_store is None and os.path.exists(BASE_INDEX_PATH):
+        base_store = FAISS.load_local(
+            BASE_INDEX_PATH,
+            get_embeddings(),
+            allow_dangerous_deserialization=True
+        )
+    return base_store
 
 # ==========================================
 # STATIC FALLBACK TERMS
@@ -74,17 +82,13 @@ def build_uploaded_index(text: str):
     if not chunks:
         return
 
-    store = FAISS.from_texts(chunks, embeddings)
+    store = FAISS.from_texts(chunks, get_embeddings())
     store.save_local(UPLOADED_INDEX_PATH)
 
 
 def load_uploaded_index():
     if os.path.exists(os.path.join(UPLOADED_INDEX_PATH, "index.faiss")):
-        return FAISS.load_local(
-            UPLOADED_INDEX_PATH,
-            embeddings,
-            allow_dangerous_deserialization=True
-        )
+        return FAISS.load_local(UPLOADED_INDEX_PATH, get_embeddings(), allow_dangerous_deserialization=True)
     return None
 
 
@@ -100,8 +104,9 @@ def retrieve_context(query: str):
         return [d.page_content for d in docs], "uploaded"
 
     # Priority 2: Base Knowledge
-    if base_store:
-        docs = base_store.similarity_search(query, k=3)
+    base = get_base_store()
+    if base:
+        docs = base.similarity_search(query, k=3)
         return [d.page_content for d in docs], "base"
 
     return [], "none"

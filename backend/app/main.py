@@ -1,5 +1,4 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from app.rag.pipeline import ask_question_with_doc
 from pypdf import PdfReader
 import io
 
@@ -46,6 +45,7 @@ def extract_pdf_text(file: UploadFile) -> str:
 
 @app.post("/ask")
 async def ask(query: str, file: UploadFile = File(None)):
+    from app.rag.pipeline import ask_question_with_doc
 
     if not query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
