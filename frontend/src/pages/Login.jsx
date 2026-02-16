@@ -76,7 +76,7 @@ const LoginPage = () => {
 
     const handleDemoLogin = (role) => {
         const credentials = {
-            citizen: ["citizen@demo.com", "password@_180905@180905"],
+            citizen: ["citizen@demo.com", "password@_180905"],
             police: ["officer@police.gov.in", "password@_180905"],
             lawyer: ["advocate@law.com", "password@_180905"],
             admin: ["admin@nyaya.gov.in", "password@_180905"] // New Admin Credential
