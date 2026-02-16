@@ -57,21 +57,29 @@ const Chat = () => {
     setLoading(true);
 
     try {
-      const formData = new FormData();
-      formData.append("question", inputText || "Analyze document");
-      if (uploadedFile) formData.append("file", uploadedFile);
-
-      const response = await fetch("http://localhost:8000/ask", {
-        method: "POST",
-        body: formData,
-      });
-
+      const baseUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+      let response;
+      if (uploadedFile) {
+        const formData = new FormData();
+        formData.append("query", inputText || "Analyze document");
+        formData.append("file", uploadedFile);
+        response = await fetch(`${baseUrl}/chat`, {
+          method: "POST",
+          body: formData,
+        });
+      } else {
+        response = await fetch(`${baseUrl}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query: inputText }),
+        });
+      }
       const data = await response.json();
       setMessages((prev) => [...prev, {
         id: Date.now() + 1,
         text: data.answer || "Processing complete.",
         sender: "bot",
-        source: data.source,
+        source: data.mode,
         confidence: data.confidence,
         disclaimer: data.disclaimer,
       }]);
