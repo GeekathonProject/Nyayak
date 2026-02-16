@@ -1,21 +1,32 @@
 services:
   - type: web
     name: nyayak-backend
-    rootDir: backend
-    runtime: python
+    env: python
     pythonVersion: 3.11
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    
+    # Build & Start commands
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    
+    # Environment variables
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: PYTHONUNBUFFERED
         value: "1"
-      - key: NYAYAK_MODEL
-        value: "sshleifer/tiny-gpt2"
+    
+    # FREE TIER CONFIGURATION
     plan: free
     region: oregon
+    
+    # Auto-deploy on push
+    autoDeploy: true
+    
+    # Health check (important for free tier to stay awake)
     healthCheckPath: /
-  - type: static
-    name: nyayak-frontend
-    rootDir: frontend
-    buildCommand: npm ci && npm run build
-    staticPublishPath: dist
+    healthCheckInterval: 3600
+    
+    # Disk & Memory limits
+    disk: /
+    diskSizeGB: 0.5
+#
