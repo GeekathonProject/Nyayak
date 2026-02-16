@@ -1,7 +1,7 @@
 services:
   - type: web
     name: nyayak-backend
-    runtime: python
+    env: python
     pythonVersion: 3.11
     
     # Build & Start commands
