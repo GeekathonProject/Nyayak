@@ -1,5 +1,6 @@
 import os
 import re
+import traceback
 from dotenv import load_dotenv
 from google import genai
 from langchain_community.vectorstores import FAISS
@@ -16,7 +17,7 @@ if not api_key:
     raise ValueError("GEMINI_API_KEY not found in .env file")
 
 # ==========================================
-# GEMINI CLIENT (NEW SDK)
+# GEMINI CLIENT
 # ==========================================
 client = genai.Client(api_key=api_key)
 
@@ -27,30 +28,34 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_INDEX_PATH = os.path.join(BASE_DIR, "..", "..", "faiss_base")
 UPLOADED_INDEX_PATH = os.path.join(BASE_DIR, "..", "..", "faiss_uploaded")
 
-# Ensure upload folder exists
 os.makedirs(UPLOADED_INDEX_PATH, exist_ok=True)
 
 # ==========================================
-# EMBEDDINGS (Low-memory: use Google GenAI API instead of local Torch)
+# EMBEDDINGS (Gemini Cloud)
 # ==========================================
 class GoogleGenAIEmbeddings(Embeddings):
-    def __init__(self, model: str = "text-embedding-004", dimension: int | None = None):
+    def __init__(self, model: str = "gemini-embedding-001"):
         self.model = model
-        self.dimension = dimension
-
-    def _embed(self, text: str):
-        res = client.models.embed_content(
-            model=self.model,
-            contents=[text], 
-            output_dimensionality=self.dimension
-        )
-        return res.embeddings[0].values
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self._embed(t) for t in texts]
+        if not texts:
+            return []
+
+        response = client.models.embed_content(
+            model=self.model,
+            contents=texts
+        )
+
+        return [e.values for e in response.embeddings]
 
     def embed_query(self, text: str) -> list[float]:
-        return self._embed(text)
+        response = client.models.embed_content(
+            model=self.model,
+            contents=[text]
+        )
+
+        return response.embeddings[0].values
+
 
 _embeddings = None
 
@@ -59,6 +64,7 @@ def get_embeddings():
     if _embeddings is None:
         _embeddings = GoogleGenAIEmbeddings()
     return _embeddings
+
 
 # ==========================================
 # LOAD BASE INDEX
@@ -75,6 +81,7 @@ def get_base_store():
         )
     return base_store
 
+
 # ==========================================
 # STATIC FALLBACK TERMS
 # ==========================================
@@ -84,11 +91,12 @@ LEGAL_TERMS = {
     "ipc": "IPC 1860 defines criminal offences."
 }
 
+
 # ==========================================
 # BUILD UPLOADED INDEX
 # ==========================================
 def build_uploaded_index(text: str):
-    if not text.strip():
+    if not text or not text.strip():
         return
 
     splitter = RecursiveCharacterTextSplitter(
@@ -106,8 +114,15 @@ def build_uploaded_index(text: str):
 
 
 def load_uploaded_index():
-    if os.path.exists(os.path.join(UPLOADED_INDEX_PATH, "index.faiss")):
-        return FAISS.load_local(UPLOADED_INDEX_PATH, get_embeddings(), allow_dangerous_deserialization=True)
+    index_file = os.path.join(UPLOADED_INDEX_PATH, "index.faiss")
+
+    if os.path.exists(index_file):
+        return FAISS.load_local(
+            UPLOADED_INDEX_PATH,
+            get_embeddings(),
+            allow_dangerous_deserialization=True
+        )
+
     return None
 
 
@@ -117,12 +132,10 @@ def load_uploaded_index():
 def retrieve_context(query: str):
     uploaded_store = load_uploaded_index()
 
-    # Priority 1: Uploaded PDF
     if uploaded_store:
         docs = uploaded_store.similarity_search(query, k=2)
         return [d.page_content for d in docs], "uploaded"
 
-    # Priority 2: Base Knowledge
     base = get_base_store()
     if base:
         docs = base.similarity_search(query, k=2)
@@ -135,11 +148,10 @@ def retrieve_context(query: str):
 # MAIN FUNCTION
 # ==========================================
 def ask_question_with_doc(query: str, uploaded_text: str = None):
-
     try:
         query_clean = query.strip().lower()
 
-        # Greeting Guard
+        # Greeting guard
         if re.match(r"^(hi+|hello+|hey+|namaste+)", query_clean):
             return {
                 "answer": "Hello! I am NyaySetu AI. How can I assist you?",
@@ -147,7 +159,7 @@ def ask_question_with_doc(query: str, uploaded_text: str = None):
                 "confidence": 100
             }
 
-        # Build uploaded index safely
+        # Build uploaded index if provided
         if uploaded_text and uploaded_text.strip():
             build_uploaded_index(uploaded_text)
 
@@ -165,19 +177,19 @@ def ask_question_with_doc(query: str, uploaded_text: str = None):
                 contexts = [fallback]
                 mode = "static"
 
-        context_text = "\n\n".join(contexts) if contexts else "No context found."
+        context_text = "\n\n".join(contexts) if contexts else "No relevant context found."
 
         system_prompt = """
 You are a professional Indian legal assistant.
 
 Guidelines:
-- Use the provided context as the primary source when it is relevant.
-- When the context is missing or incomplete, rely on your general knowledge of Indian law.
-- If you are still unsure, say that you are not certain and recommend consulting a qualified lawyer.
-- Be clear, practical and concise.
+- Use provided context first when relevant.
+- If context is incomplete, rely on general Indian law knowledge.
+- If unsure, recommend consulting a qualified lawyer.
+- Be clear and concise.
 """
 
-        prompt = f"""
+        final_prompt = f"""
 {system_prompt}
 
 Context:
@@ -187,24 +199,41 @@ Question:
 {query}
 """
 
-        # Gemini call (correct content format)
+        # ==========================================
+        # GEMINI GENERATION
+        # ==========================================
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=[
                 {
                     "role": "user",
-                    "parts": [{"text": prompt}]
+                    "parts": [{"text": final_prompt}]
                 }
             ]
         )
 
-        answer = response.text.strip() if response.text else \
-            "I am unable to provide a clear legal answer based on the available information. Please consult a qualified legal professional."
+        # SAFE TEXT EXTRACTION (handles all SDK versions)
+        answer = None
+
+        if hasattr(response, "text") and response.text:
+            answer = response.text
+        elif hasattr(response, "candidates") and response.candidates:
+            try:
+                answer = response.candidates[0].content.parts[0].text
+            except Exception:
+                answer = None
+
+        if not answer:
+            answer = "I am unable to provide a clear legal answer. Please consult a qualified lawyer."
+
         answer = re.sub(r"\s+", " ", answer).strip()
 
-        confidence = 95 if mode == "uploaded" else \
-                     85 if mode == "base" else \
-                     70 if mode == "static" else 50
+        confidence = (
+            95 if mode == "uploaded"
+            else 85 if mode == "base"
+            else 70 if mode == "static"
+            else 50
+        )
 
         return {
             "answer": answer,
@@ -214,9 +243,12 @@ Question:
         }
 
     except Exception as e:
-        print("FULL ERROR:", str(e))
+        print("========= FULL TRACEBACK =========")
+        traceback.print_exc()
+        print("==================================")
+
         return {
-            "answer": f"Internal error: {str(e)}",
+            "answer": f"Internal error: {repr(e)}",
             "mode": "error",
             "confidence": 0
         }
