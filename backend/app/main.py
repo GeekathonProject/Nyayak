@@ -1,9 +1,17 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from app.rag.pipeline import ask_question_with_doc
-import PyPDF2
+from pypdf import PdfReader
 import io
 
 app = FastAPI()
+
+@app.get("/")
+def root():
+    return {"status": "ok"}
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 def extract_pdf_text(file: UploadFile) -> str:
@@ -13,7 +21,7 @@ def extract_pdf_text(file: UploadFile) -> str:
         if not contents:
             raise HTTPException(status_code=400, detail="Empty file uploaded.")
 
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(contents))
+        pdf_reader = PdfReader(io.BytesIO(contents))
 
         text = ""
         for page in pdf_reader.pages:
