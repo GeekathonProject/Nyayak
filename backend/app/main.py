@@ -1,6 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from pypdf import PdfReader
 import io
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -43,11 +44,27 @@ def extract_pdf_text(file: UploadFile) -> str:
         )
 
 
+class AskRequest(BaseModel):
+    query: str
+
+
 @app.post("/ask")
-async def ask(query: str, file: UploadFile = File(None)):
+async def ask_json(payload: AskRequest):
     from app.rag.pipeline import ask_question_with_doc
 
-    if not query.strip():
+    query = (payload.query or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Query cannot be empty.")
+
+    result = ask_question_with_doc(query, None)
+    return result
+
+
+@app.post("/ask-file")
+async def ask_file(query: str = Form(...), file: UploadFile = File(None)):
+    from app.rag.pipeline import ask_question_with_doc
+
+    if not (query or "").strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
 
     uploaded_text = None
@@ -58,9 +75,7 @@ async def ask(query: str, file: UploadFile = File(None)):
                 status_code=400,
                 detail="Only PDF files are supported."
             )
-
         uploaded_text = extract_pdf_text(file)
 
     result = ask_question_with_doc(query, uploaded_text)
-
     return result
