@@ -23,7 +23,8 @@ langchain-community==0.4.1
 langchain-huggingface==1.2.0
 
 # UTILITIES
-numpy>=1.24.0,<2.0
+numpy>=1.24.0,<2.0; python_version < "3.13"
+numpy>=2.1.0; python_version >= "3.13"
 pypdf>=4.0.0,<5.0
 google-genai
 python-dotenv
