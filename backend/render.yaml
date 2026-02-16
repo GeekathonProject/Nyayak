@@ -5,13 +5,13 @@ services:
     pythonVersion: 3.11
     
     # Build & Start commands
-    buildCommand: "pip install -r requirements.txt"
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
     startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     
     # Environment variables
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11
+        value: 3.11.9
       - key: PYTHONUNBUFFERED
         value: "1"
     
@@ -29,3 +29,4 @@ services:
     # Disk & Memory limits
     disk: /
     diskSizeGB: 0.5
+#
