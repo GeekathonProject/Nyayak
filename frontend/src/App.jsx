@@ -52,6 +52,7 @@ import AdminDashboard from "./pages/Admin/AdminDashboard";
 import AdminUserDetails from "./pages/Admin/AdminUserDetails";
 import DraftingTool from "./pages/lawyer/DraftingTool";
 import HowItWorks from "./pages/HowItWorks";
+import CitizenCrimeMap from "./pages/citizen/CitizenCrimeMap";
 
 function App() {
   return (
@@ -135,7 +136,7 @@ function App() {
               }
             >
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/map" element={<SafetyMap />} />
+              <Route path="/map" element={<CitizenCrimeMap isPageMode={true} />} />
               <Route path="/chat" element={<Chat />} />
               <Route path="/complaint" element={<ComplaintPage/>} />
               <Route path="/emergency-logs" element={<EmergencyLogs/>} />

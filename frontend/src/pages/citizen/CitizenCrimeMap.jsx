@@ -2,26 +2,26 @@ import React, { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap, Rectangle, Circle } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { toast, ToastContainer } from "react-toastify";
 import { supabase } from "../../lib/supabase";
-import { X, MapPin, Activity, Minus, Plus, Loader2, Sun, Moon, AlertTriangle } from "lucide-react";
+import { X, MapPin, Activity, Minus, Plus, Sun, Moon, AlertTriangle } from "lucide-react";
 
-// Aura Effect Component for Dangerous Zones
+// --- LOGIC PRESERVED: Aura Effect ---
 const DangerousAura = ({ lat, lng }) => {
   return (
     <Circle
       center={[lat, lng]}
-      radius={200} // radius in meters
+      radius={200}
       pathOptions={{
         fillColor: '#ef4444',
         fillOpacity: 0.15,
         color: 'transparent',
-        className: 'animate-pulse-slow' // Custom CSS for aura
+        className: 'animate-pulse-slow'
       }}
     />
   );
 };
 
+// --- LOGIC PRESERVED: Heatmap Grid ---
 const HeatmapGridDisplay = ({ locations, zoom, isDarkMode }) => {
   if (!locations || locations.length === 0) return null;
   const gridSize = 0.0005 * Math.pow(2, 15 - zoom);
@@ -41,8 +41,6 @@ const HeatmapGridDisplay = ({ locations, zoom, isDarkMode }) => {
       {Object.values(grid).map((cell, idx) => {
         const total = cell.dangerous + cell.safe;
         const dangerRatio = cell.dangerous / total;
-        
-        // Dynamic colors based on safety
         let color = dangerRatio > 0.7 ? '#ef4444' : dangerRatio > 0.4 ? '#f59e0b' : '#10b981';
         
         return (
@@ -64,30 +62,46 @@ const HeatmapGridDisplay = ({ locations, zoom, isDarkMode }) => {
   );
 };
 
-const CitizenCrimeMap = ({ isOpen, onClose }) => {
+// --- MAIN COMPONENT ---
+const CitizenCrimeMap = ({ isOpen, onClose, isPageMode = false }) => {
   const [markedLocations, setMarkedLocations] = useState([]);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(13);
   const [showHeatmap, setShowHeatmap] = useState(true);
 
+  // LOGIC PRESERVED: Fetch Data
   useEffect(() => {
-    if (!isOpen) return;
+    // If not a page and not open (modal closed), don't fetch
+    if (!isPageMode && !isOpen) return;
+
     const fetchData = async () => {
       const { data } = await supabase.from('location_safety').select('*');
       if (data) setMarkedLocations(data);
       setLoading(false);
     };
     fetchData();
-  }, [isOpen]);
+  }, [isOpen, isPageMode]);
 
-  if (!isOpen) return null;
+  // If used as a modal and closed, return null
+  if (!isPageMode && !isOpen) return null;
+
+  // --- DYNAMIC STYLES ---
+  // Modal: Fixed overlay, z-index high.
+  // Page: Relative, full height of parent container.
+  const containerClass = isPageMode 
+    ? `w-full h-[calc(100vh-2rem)] relative flex flex-col ${isDarkMode ? 'dark' : ''} transition-colors duration-500`
+    : `fixed inset-0 z-[9999] flex items-center justify-center p-0 md:p-6 transition-colors duration-500 bg-black/50 backdrop-blur-sm ${isDarkMode ? 'dark' : ''}`;
+
+  const wrapperClass = isPageMode
+    ? "w-full h-full bg-white dark:bg-[#0B0F1A] rounded-3xl shadow-sm overflow-hidden flex flex-col relative border border-slate-200 dark:border-white/5"
+    : "w-full h-full max-w-7xl bg-white dark:bg-[#0B0F1A] md:rounded-3xl shadow-2xl overflow-hidden flex flex-col relative border border-slate-200 dark:border-white/5";
 
   return (
-    <div className={`${isDarkMode ? 'dark' : ''} fixed inset-0 z-[9999] flex items-center justify-center p-0 md:p-6 transition-colors duration-500`}>
-      <div className="w-full h-full max-w-7xl bg-white dark:bg-[#0B0F1A] md:rounded-3xl shadow-2xl overflow-hidden flex flex-col relative border border-slate-200 dark:border-white/5">
+    <div className={containerClass}>
+      <div className={wrapperClass}>
         
-        {/* Floating Controls Overlay */}
+        {/* Controls Overlay */}
         <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-3">
           <header className="bg-white/90 dark:bg-[#161B26]/80 backdrop-blur-xl border border-slate-200 dark:border-white/10 px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-6">
             <div className="flex items-center gap-3 pr-4 border-r border-slate-200 dark:border-white/10">
@@ -105,13 +119,16 @@ const CitizenCrimeMap = ({ isOpen, onClose }) => {
               {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
             </button>
 
-            <button onClick={onClose} className="p-2 hover:bg-red-500/10 rounded-xl group transition-all">
-              <X className="w-5 h-5 text-slate-400 group-hover:text-red-500" />
-            </button>
+            {/* Close Button: Only show if NOT in page mode */}
+            {!isPageMode && (
+              <button onClick={onClose} className="p-2 hover:bg-red-500/10 rounded-xl group transition-all">
+                <X className="w-5 h-5 text-slate-400 group-hover:text-red-500" />
+              </button>
+            )}
           </header>
         </div>
 
-        {/* Map */}
+        {/* Map Logic */}
         <main className="flex-1 relative">
           <MapContainer center={[22.5726, 88.3639]} zoom={zoomLevel} style={{ height: "100%", width: "100%" }} zoomControl={false}>
             <TileLayer 
