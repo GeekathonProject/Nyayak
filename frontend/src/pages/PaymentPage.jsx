@@ -2,34 +2,32 @@ import { useState, useEffect } from "react";
 import { FiShield, FiArrowLeft, FiInfo, FiLock, FiCheckCircle } from "react-icons/fi";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabase";
-import { useNotification } from "../context/NotificationContext"; // <--- Import Context
+import { useNotification } from "../context/NotificationContext";
 
 export default function PaymentPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { sendNotification } = useNotification(); // <--- Init Hook
+  const { sendNotification } = useNotification(); 
   
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   
-  // State to hold real data
   const [details, setDetails] = useState({
     amount: location.state?.amount || 5000, 
     caseTitle: "Loading...",
     lawyerName: "Loading...",
     caseId: location.state?.caseId,
-    lawyerId: null // <--- Needed for notification
+    lawyerId: null 
   });
 
   // --- FETCH REAL CASE DETAILS ---
   useEffect(() => {
     if (!details.caseId) {
-        navigate('/my-cases'); 
+        navigate(-1); 
         return;
     }
 
     const fetchDetails = async () => {
-        // Fetch Title AND Lawyer ID so we can notify them later
         const { data, error } = await supabase
             .from('cases')
             .select(`
@@ -54,20 +52,62 @@ export default function PaymentPage() {
     fetchDetails();
   }, [details.caseId, navigate]);
 
-  // --- HANDLE PAYMENT LOGIC (SHOWCASE/DEMO MODE) ---
+  // --- STRICT DATABASE UPDATE LOGIC ---
   const handlePayment = async () => {
     setLoading(true);
     
-    // Simulate payment processing delay
+    // 1. Simulate Gateway Processing
     await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // 2. Strip all commas/symbols and force it into an Integer (for int4 database column)
+    const cleanAmount = parseInt(String(details.amount).replace(/[^0-9]/g, ""), 10);
+
+    // 3. Update Supabase
+    const { data: updatedCase, error } = await supabase
+        .from('cases')
+        .update({ 
+            status: 'Active', 
+            payment_amount: cleanAmount 
+            // REMOVED 'payment_status' because it doesn't exist in your DB schema!
+        })
+        .eq('id', details.caseId)
+        .select(); // Forces Supabase to return the row to confirm it actually updated
 
     setLoading(false);
 
-    // Navigate to Success (Showcase mode - just show success message)
+    // 4. Strict Error Checking
+    if (error) {
+        console.error("Database Update Failed:", error);
+        alert(`Database Error: ${error.message}`);
+        return;
+    }
+
+    if (!updatedCase || updatedCase.length === 0) {
+        console.error("Row Level Security blocked the update.");
+        alert("Payment processed, but database security rules blocked the status update.");
+        return;
+    }
+
+    // 5. Notify the Lawyer (Only happens if DB update was successful)
+    if (details.lawyerId) {
+        try {
+            await sendNotification(
+                details.lawyerId,
+                "Retainer Received",
+                "Payment confirmed. The case is now Active.",
+                "success",
+                `/lawyer/cases/${details.caseId}` 
+            );
+        } catch (notifError) {
+            console.warn("Notification failed, but DB updated:", notifError);
+        }
+    }
+
+    // 6. Navigate to Success 
     navigate('/payment-success', { 
         state: { 
-            transactionId: `PAY-${Math.floor(Math.random() * 1000000)}`,
-            amount: details.amount,
+            transactionId: `TXN-${Math.floor(Math.random() * 1000000)}`,
+            amount: cleanAmount,
             caseTitle: details.caseTitle,
             caseId: details.caseId
         } 
@@ -138,7 +178,7 @@ export default function PaymentPage() {
 
             <div className="mb-10 text-center">
               <span className="text-6xl font-black text-slate-900 tracking-tighter">
-                ₹ {String(details.amount).replace(/₹/g, '').toLocaleString()}
+                ₹{Number(String(details.amount).replace(/[^0-9.-]+/g,"")).toLocaleString('en-IN')}
               </span>
               <p className="text-slate-400 font-medium mt-2 text-sm">One-time retainer fee</p>
             </div>
@@ -172,7 +212,7 @@ export default function PaymentPage() {
           </div>
           
           <p className="text-center text-slate-400 text-xs mt-8">
-            NyayaSetu does not store your card details. All transactions are handled by authorized payment gateways.
+            NyayaSahayak does not store your card details. All transactions are handled by authorized payment gateways.
           </p>
         </div>
       </div>
