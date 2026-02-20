@@ -142,7 +142,7 @@ export default function CaseDetails() {
                 </div>
             )}
 
-            {/* Case Description */}
+            {/* Case Description & Client Evidence */}
             <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 p-6 md:p-8 rounded-3xl shadow-sm">
               <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-6 uppercase tracking-widest flex items-center gap-2">
                  <FileText className="w-4 h-4" /> Official Statement
@@ -151,7 +151,6 @@ export default function CaseDetails() {
                  {caseData.description}
               </p>
               
-              {/* Evidence Section inside Description card to keep UI tight */}
               <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
                  <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-4 uppercase tracking-widest flex items-center gap-2">
                     <Download className="w-4 h-4" /> Attached Evidence
@@ -162,13 +161,38 @@ export default function CaseDetails() {
                     <div className="flex flex-wrap gap-3">
                        {caseData.documents.map((doc, i) => (
                           <a key={i} href={doc} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-500 transition-colors shadow-sm">
-                             <FileText className="w-4 h-4 text-blue-500" /> Document_{i+1}.pdf
+                             <FileText className="w-4 h-4 text-blue-500" /> Evidence_{i+1}.pdf
                           </a>
                        ))}
                     </div>
                  )}
               </div>
             </div>
+
+            {/* NEW: Documents Prepared by Counsel (Only shows if ACTIVE and documents exist) */}
+            {caseData.status === 'Active' && caseData.lawyer_documents && caseData.lawyer_documents.length > 0 && (
+                <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/10 dark:to-[#111827] border border-blue-200 dark:border-blue-900/30 p-6 md:p-8 rounded-3xl shadow-sm relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                    <h3 className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-6 flex items-center gap-2">
+                        <Scale className="w-4 h-4" /> Documents Prepared by Counsel
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {caseData.lawyer_documents.map((doc, i) => (
+                            <a key={i} href={doc} target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 bg-white dark:bg-[#1F2937] border border-slate-200 dark:border-slate-700 rounded-xl hover:border-blue-300 dark:hover:border-blue-700 transition-all shadow-sm group">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg flex items-center justify-center">
+                                        <FileText className="w-5 h-5" />
+                                    </div>
+                                    <div className="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                        Legal_Draft_v{i+1}.pdf
+                                    </div>
+                                </div>
+                                <Download className="w-5 h-5 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                            </a>
+                        ))}
+                    </div>
+                </div>
+            )}
 
           </div>
 
@@ -216,7 +240,7 @@ export default function CaseDetails() {
                    Legal Retainer Fee
                  </h3>
                  <p className="text-4xl font-bold mt-2 font-serif-heading">
-                   {caseData.lawyers ? `${caseData.lawyers.hourly_rate}` : "—"}
+                   {caseData.lawyers ? `₹${caseData.lawyers.hourly_rate}` : "—"}
                  </p>
               </div>
               

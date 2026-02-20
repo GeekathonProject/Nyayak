@@ -1,29 +1,28 @@
-// pages/Lawyer/ActiveCaseDetails.jsx
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, FileText, User, Calendar, Shield, Paperclip, 
-  Clock, CheckCircle, AlertCircle, Phone, Mail 
+  Clock, CheckCircle, AlertCircle, Phone, Mail, Upload, Download, Loader2 
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { Loader2 } from 'lucide-react';
+import { useNotification } from "../../context/NotificationContext"; // Added Notification
+import { toast } from "react-toastify"; // Added Toast
 
 const ActiveCaseDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { sendNotification } = useNotification(); // Init Notification
   const [caseData, setCaseData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false); // Init Upload State
 
   useEffect(() => {
     const fetchCaseDetails = async () => {
-      // Fetch specific case + Client Info
-      // Find this part inside fetchCaseDetails
-const { data, error } = await supabase
-  .from('cases')
-  // REMOVE 'phone_number' from this line
-  .select('*, users:user_id(full_name, email)') 
-  .eq('id', id)
-  .single();
+      const { data, error } = await supabase
+        .from('cases')
+        .select('*, users:user_id(full_name, email)') 
+        .eq('id', id)
+        .single();
 
       if (error) console.error("Error:", error);
       else setCaseData(data);
@@ -33,6 +32,61 @@ const { data, error } = await supabase
 
     if (id) fetchCaseDetails();
   }, [id]);
+
+  // --- UPLOAD LOGIC ADDED HERE ---
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      // 1. Upload to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+      const filePath = `lawyer_drafts/${caseData.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('documents') // Assuming bucket is named 'documents'
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Get Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath);
+
+      // 3. Update 'lawyer_documents' array in DB
+      const currentDocs = caseData.lawyer_documents || [];
+      const updatedDocs = [...currentDocs, publicUrl];
+
+      const { error: dbError } = await supabase
+        .from('cases')
+        .update({ lawyer_documents: updatedDocs })
+        .eq('id', id);
+
+      if (dbError) throw dbError;
+
+      // 4. Update local state so the UI shows the new file immediately
+      setCaseData(prev => ({ ...prev, lawyer_documents: updatedDocs }));
+
+      // 5. Send Notification to Citizen
+      await sendNotification(
+        caseData.user_id,
+        "New Legal Document",
+        "Your lawyer has uploaded a new document to your case file.",
+        "info",
+        `/cases/${id}`
+      );
+
+      toast.success("Document shared with client successfully!");
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast.error("Failed to upload document.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-slate-400 w-8 h-8"/></div>;
   if (!caseData) return <div className="p-10 text-center text-red-500 font-bold">Case Record Not Found</div>;
@@ -133,20 +187,47 @@ const { data, error } = await supabase
                 </div>
              </div>
 
-             {/* Documents Area */}
+             {/* Documents Area - UPDATED WITH UPLOAD UI */}
              <div className="bg-white rounded-2xl p-8 shadow-sm border border-slate-200">
                 <div className="flex justify-between items-center mb-6">
                    <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                      <Paperclip className="w-5 h-5 text-slate-400"/> Case Documents
                    </h3>
-                   <button className="text-sm font-bold text-blue-600 hover:underline">+ Upload New</button>
+                   
+                   {/* File Input hidden behind label */}
+                   <label className={`cursor-pointer text-sm font-bold text-blue-600 hover:underline flex items-center gap-2 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                     {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                     {uploading ? 'Uploading...' : '+ Upload New'}
+                     <input type="file" className="hidden" onChange={handleFileUpload} accept=".pdf,.doc,.docx" />
+                   </label>
                 </div>
 
-                {/* Empty State for Docs */}
-                <div className="p-10 border-2 border-dashed border-slate-200 rounded-xl text-center bg-slate-50">
-                  <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3"/>
-                  <p className="text-slate-500 font-medium text-sm">No legal documents attached to this case file yet.</p>
-                </div>
+                {/* Show Empty State OR Document List */}
+                {!caseData.lawyer_documents || caseData.lawyer_documents.length === 0 ? (
+                    <div className="p-10 border-2 border-dashed border-slate-200 rounded-xl text-center bg-slate-50">
+                      <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3"/>
+                      <p className="text-slate-500 font-medium text-sm">No legal documents attached to this case file yet.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {caseData.lawyer_documents.map((docUrl, index) => (
+                            <div key={index} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-all">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-white border border-slate-200 text-blue-600 rounded-lg flex items-center justify-center shrink-0">
+                                        <FileText className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <div className="text-sm font-bold text-slate-900">Legal_Draft_v{index + 1}.pdf</div>
+                                        <div className="text-xs text-emerald-600 font-medium">Shared with Client</div>
+                                    </div>
+                                </div>
+                                <a href={docUrl} target="_blank" rel="noopener noreferrer" className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
+                                    <Download className="w-5 h-5" />
+                                </a>
+                            </div>
+                        ))}
+                    </div>
+                )}
              </div>
 
           </div>

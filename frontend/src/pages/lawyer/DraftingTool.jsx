@@ -1,16 +1,13 @@
-import React, { useState } from "react";
-import { Bot, FileText, Sparkles, Send, Scale } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { Bot, FileText, Sparkles, Send, Scale, Loader2 } from "lucide-react";
 import { useTheme } from "../../context/themeContext";
+import { GoogleGenAI } from "@google/genai"; // NEW SDK IMPORT
 
 export default function DraftingTool() {
   const { isDark } = useTheme();
-  // Using a generic scale icon if the image fails, or keep your url
   const scalesBgUrl = "/scale.png"; 
 
   return (
-    // ADDED: w-full to ensure it grabs full width
-    // NOTE: If you still see a white border around this component, 
-    // check your parent <Layout> component for 'p-8' or 'p-4' and remove it for this route.
     <div className={`min-h-screen w-full transition-colors duration-500 font-sans relative flex flex-col ${isDark ? "bg-[#0B1120] text-slate-100" : "bg-[#FFFAF0] text-slate-900"}`}>
       
       {/* Background Image Layer */}
@@ -19,7 +16,7 @@ export default function DraftingTool() {
         style={{ backgroundImage: `url(${scalesBgUrl})` }} 
       />
 
-      {/* Main Content - Changed max-w-5xl to w-full/max-w-[1600px] and reduced py-12 to py-6 */}
+      {/* Main Content */}
       <div className="relative z-10 w-full max-w-[1600px] mx-auto px-4 md:px-6 py-6 flex-1 flex flex-col">
         
         {/* Header */}
@@ -35,26 +32,25 @@ export default function DraftingTool() {
           </div>
           <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${isDark ? "bg-slate-800 text-slate-300 border border-slate-700" : "bg-slate-100 text-slate-700 border border-slate-200"}`}>
             <Sparkles className="w-4 h-4" />
-            Beta v1.0
+            Gemini 3 Flash
           </span>
         </div>
 
-        {/* Grid Layout - Expanded height */}
+        {/* Grid Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-[600px]">
           
-          {/* Chat Section - Takes 2/3 width */}
+          {/* Chat Section */}
           <div className={`flex flex-col rounded-2xl border lg:col-span-2 overflow-hidden ${isDark ? "bg-white/5 border-white/10" : "bg-white/80 border-white/40"}`}>
             <div className={`px-6 py-4 border-b flex items-center gap-2 ${isDark ? "border-white/10" : "border-slate-200/60"}`}>
               <Bot className="w-5 h-5 text-orange-500" />
-              <h2 className="text-lg font-bold">Chatbot</h2>
+              <h2 className="text-lg font-bold">Nyaya Assistant</h2>
             </div>
-            {/* Pass className to fill height */}
-            <div className="flex-1 p-0">
+            <div className="flex-1 p-0 overflow-hidden">
                <ChatUI isDark={isDark} />
             </div>
           </div>
 
-          {/* Sidebar / Tools - Takes 1/3 width */}
+          {/* Sidebar / Tools */}
           <div className={`flex flex-col rounded-2xl border lg:col-span-1 ${isDark ? "bg-white/5 border-white/10" : "bg-white/80 border-white/40"}`}>
             <div className={`px-6 py-4 border-b flex items-center gap-2 ${isDark ? "border-white/10" : "border-slate-200/60"}`}>
               <FileText className="w-5 h-5 text-orange-500" />
@@ -90,37 +86,108 @@ export default function DraftingTool() {
 }
 
 function ChatUI({ isDark }) {
-  const [messages, setMessages] = useState([
-    { id: 1, role: "system", text: "Welcome to the AI Legal Chatbot. I can help you draft legal documents, summarize cases, or find specific IPC codes." },
-    { id: 2, role: "user", text: "Draft a bail application for theft case." },
-    { id: 3, role: "assistant", text: "Certainly. To draft a robust bail application under Section 437/439 CrPC, I need the FIR number, Police Station name, and specific grounds for bail (e.g., medical issues, false implication)." },
-  ]);
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef(null);
+  
+  const [messages, setMessages] = useState([
+    { 
+        id: 1, 
+        role: "system", 
+        text: "Welcome to the NyayaSahayak Legal Chatbot. I can help you draft legal documents, summarize cases, or provide general legal guidance. How can I assist you today?" 
+    }
+  ]);
 
-  const sendMessage = (e) => {
+  // Auto-scroll to bottom when messages update
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+  useEffect(() => { scrollToBottom(); }, [messages, isLoading]);
+
+  // --- NEW GEMINI 3 SDK LOGIC ---
+  const sendMessage = async (e) => {
     e.preventDefault();
-    if (!input.trim()) return;
-    setMessages((prev) => [...prev, { id: Date.now(), role: "user", text: input.trim() }]);
+    if (!input.trim() || isLoading) return;
+
+    const userMessage = input.trim();
     setInput("");
+    
+    // Add user message to UI
+    setMessages((prev) => [...prev, { id: Date.now(), role: "user", text: userMessage }]);
+    setIsLoading(true);
+
+    try {
+      // 1. Initialize new GoogleGenAI client (Uses Vite env variable)
+      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+      
+      // 2. Format history for the new SDK's 'contents' array requirement
+      // The API requires roles to be strictly 'user' or 'model'
+      const formattedContents = messages
+        .filter(m => m.role !== 'system') 
+        .map(m => ({
+            role: m.role === 'user' ? 'user' : 'model',
+            parts: [{ text: m.text }]
+        }));
+
+      // Append the brand new user message to the array
+      formattedContents.push({ 
+        role: 'user', 
+        parts: [{ text: userMessage }] 
+      });
+
+      // 3. Make the call using generateContent with the systemInstruction in config
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview", // New Model
+        contents: formattedContents,
+        config: {
+            systemInstruction: "You are the specialized AI Legal Drafting Assistant for advocates and legal professionals on the **NyayaSahayak** platform in India. Your primary goal is to accelerate the workflow of verified lawyers through high-level legal research, document drafting, and case analysis.Follow these core directives strictly:1. **Tone, Decorum & Professionalism:** Speak peer-to-peer as a highly competent, respectful junior associate assisting a senior advocate. Maintain strict professional decorum. Use precise legal terminology. Under no circumstances should you use slang, informal abbreviations, or patronizing language.2. **Indian Legal Context:** Base all drafts and research entirely on the Indian legal system. Accurately utilize the new criminal laws (BNS, BNSS, BSA) alongside existing frameworks like the IPC, CrPC, CPC, Indian Evidence Act, and Constitutional provisions.3. **Efficiency & Depth:** Assume the user is a qualified legal professional. Do not over-explain basic legal concepts. Focus immediately on citing relevant precedents, statutory provisions, procedural rules, and providing high-level legal analysis. 4. **Court-Ready Drafting:** When drafting documents (e.g., Bail Applications under BNSS/CrPC, Plaints, Written Statements, Legal Notices, Contracts), use standard Indian court formatting. Output clean Markdown with precise, professional placeholders (e.g., `[Name of the Hon'ble Court]`, `[Name of the Petitioner/Defendant]`, `[Insert Specific Grounds]`).5. **The Golden Rule (Verification Disclaimer):** You are an AI assistant designed to augment a lawyer's workflow, not replace their professional judgment. Always conclude your drafts or research with a brief, polite disclaimer reminding the advocate to independently verify case laws, citations, and latest statutory updates before filing any document before the Honble Court."
+        }
+      });
+
+      // 4. Add AI response to UI
+      // The new SDK accesses the text directly via response.text
+      setMessages((prev) => [...prev, { id: Date.now(), role: "assistant", text: response.text }]);
+
+    } catch (error) {
+      console.error("Gemini 3 API Error:", error);
+      setMessages((prev) => [...prev, { 
+          id: Date.now(), 
+          role: "assistant", 
+          text: "I apologize, but I am having trouble connecting to the new Gemini 3 database right now. Please verify your API key or check your internet connection." 
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="h-full flex flex-col">
-      {/* Messages Area - Added h-full and removed fixed height */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-             <div className={`max-w-[85%] px-5 py-3 rounded-2xl text-sm leading-relaxed shadow-sm ${
+             <div className={`max-w-[85%] px-5 py-4 rounded-2xl text-sm leading-relaxed shadow-sm whitespace-pre-wrap ${
                 m.role === "user"
-                  ? isDark ? "bg-orange-600 text-white rounded-tr-none" : "bg-orange-600 text-white rounded-tr-none"
+                  ? "bg-orange-600 text-white rounded-tr-none"
                   : m.role === "assistant"
                     ? isDark ? "bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700" : "bg-white text-slate-800 rounded-tl-none border border-slate-200"
-                    : isDark ? "bg-slate-900/50 text-slate-400 w-full text-center text-xs mb-2" : "bg-slate-100 text-slate-500 w-full text-center text-xs mb-2"
+                    : isDark ? "bg-slate-900/50 text-slate-400 w-full text-center text-xs mb-2 shadow-none" : "bg-slate-100 text-slate-500 w-full text-center text-xs mb-2 shadow-none"
               }`}>
               {m.text}
             </div>
           </div>
         ))}
+        
+        {/* Loading Animation */}
+        {isLoading && (
+            <div className="flex justify-start">
+                <div className={`max-w-[85%] px-5 py-4 rounded-2xl rounded-tl-none flex items-center gap-3 border shadow-sm ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+                    <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
+                    <span className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>Analyzing legal parameters...</span>
+                </div>
+            </div>
+        )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Input Area */}
@@ -129,15 +196,21 @@ function ChatUI({ isDark }) {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your legal query here..."
-            className={`flex-1 px-5 py-3 rounded-xl outline-none border transition-all ${
+            disabled={isLoading}
+            placeholder="E.g., Draft a bail application for..."
+            className={`flex-1 px-5 py-3.5 rounded-xl outline-none border transition-all ${
                 isDark 
-                ? "bg-slate-800 text-white border-slate-700 placeholder:text-slate-500 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10" 
-                : "bg-white border-slate-200 text-slate-900 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10"
+                ? "bg-slate-800 text-white border-slate-700 placeholder:text-slate-500 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10 disabled:opacity-50" 
+                : "bg-white border-slate-200 text-slate-900 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/10 disabled:opacity-50"
             }`}
           />
-          <button className={`p-3 rounded-xl font-bold flex items-center justify-center transition-transform active:scale-95 shadow-lg ${isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-slate-900 hover:bg-black text-white"}`}>
-            <Send className="w-5 h-5" />
+          <button 
+            disabled={isLoading || !input.trim()}
+            className={`p-3.5 rounded-xl font-bold flex items-center justify-center transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed
+                ${isDark ? "bg-orange-600 hover:bg-orange-500 text-white" : "bg-slate-900 hover:bg-black text-white active:scale-95"}
+            `}
+          >
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>
         </form>
       </div>
