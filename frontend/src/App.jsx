@@ -48,7 +48,7 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import Schedule from "./pages/lawyer/Schedule";
 import ActiveCaseDetails from "./pages/lawyer/ActiveCaseDetail";
 import VerificationPending from "./pages/VerificationPending";
-import AdminDashboard from "./pages/Admin/AdminDashboard";
+
 import AdminUserDetails from "./pages/Admin/AdminUserDetails";
 import DraftingTool from "./pages/lawyer/DraftingTool";
 import HowItWorks from "./pages/HowItWorks";
@@ -57,6 +57,7 @@ import ScrollToTop from "./components/ScrollToTop";
 import FIRManagement from "./pages/police/FIRmanagement";
 import FIRDetail from "./pages/police/FIRdetails";
 import FileFIR from "./pages/citizen/FileFIR";
+import AdminLayout from "./pages/Admin/AdminLayout";
 
 function App() {
   return (
@@ -77,10 +78,10 @@ function App() {
             <Route path="/verification-pending" element={<VerificationPending />} />
 
             <Route
-            path="/admin"
+            path="/admin/*"
               element={
                 <ProtectedRoute>
-                    <AdminDashboard />
+                    <AdminLayout />
                 </ProtectedRoute>
               }
             ></Route>
