@@ -30,10 +30,10 @@ export default function DraftingTool() {
               <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>Drafting assistant and document generator</p>
             </div>
           </div>
-          <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${isDark ? "bg-slate-800 text-slate-300 border border-slate-700" : "bg-slate-100 text-slate-700 border border-slate-200"}`}>
+          {/* <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${isDark ? "bg-slate-800 text-slate-300 border border-slate-700" : "bg-slate-100 text-slate-700 border border-slate-200"}`}>
             <Sparkles className="w-4 h-4" />
             Gemini 3 Flash
-          </span>
+          </span> */}
         </div>
 
         {/* Grid Layout */}
