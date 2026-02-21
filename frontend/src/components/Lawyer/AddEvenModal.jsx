@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from "react";
-import { X, Calendar, Clock, MapPin, FileText } from "lucide-react";
+import React, { useState } from "react";
+import { X, Calendar, Clock, MapPin, FileText, Loader2 } from "lucide-react";
+import { supabase } from "../../lib/supabase"; 
+import { useNotification } from "../../context/NotificationContext"; 
+import { toast } from "react-toastify";
 
 export default function AddEventModal({ onClose, onAdd, prefillData = {} }) {
+  const { sendNotification } = useNotification();
+  
   // Initialize state with prefillData if available (from Docket)
   const [title, setTitle] = useState(prefillData.title || "");
   const [type, setType] = useState(prefillData.type || "Court");
@@ -11,29 +16,86 @@ export default function AddEventModal({ onClose, onAdd, prefillData = {} }) {
   const [location, setLocation] = useState(prefillData.location || "High Court");
   const [notes, setNotes] = useState("");
   const [riskLevel, setRiskLevel] = useState("Normal");
+  
+  const [isSubmitting, setIsSubmitting] = useState(false); 
 
-  const handleSubmit = () => {
-    if (!title || !dateStr || !timeStr) return;
+  const handleSubmit = async () => {
+    if (!title || !dateStr || !timeStr) {
+        toast.error("Please fill in the title, date, and time.");
+        return;
+    }
 
-    // Construct ISO DateTime
-    const startDateTime = new Date(`${dateStr}T${timeStr}:00`);
-    const endDateTime = new Date(startDateTime.getTime() + duration * 60000);
+    setIsSubmitting(true);
 
-    onAdd({
-      title,
-      event_type: type,
-      start_time: startDateTime.toISOString(),
-      end_time: endDateTime.toISOString(),
-      location,
-      notes,
-      case_id: prefillData.case_id || null, // Link to case if provided
-      risk_level: riskLevel
-    });
+    try {
+        // Construct ISO DateTime
+        const startDateTime = new Date(`${dateStr}T${timeStr}:00`);
+        const endDateTime = new Date(startDateTime.getTime() + duration * 60000);
+
+        // --- NEW: Fetch current user to satisfy RLS Policy ---
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) throw new Error("User not authenticated");
+
+        const eventPayload = {
+          lawyer_id: user.id, // <-- FIX: Added lawyer_id to satisfy database rules
+          title,
+          event_type: type,
+          start_time: startDateTime.toISOString(),
+          end_time: endDateTime.toISOString(),
+          location,
+          notes,
+          case_id: prefillData.case_id || null, 
+          risk_level: riskLevel,
+          status: 'Scheduled'
+        };
+
+        // 1. Insert the event into the database
+        const { data: newEvent, error: insertError } = await supabase
+            .from('legal_events')
+            .insert([eventPayload])
+            .select()
+            .single();
+
+        if (insertError) throw insertError;
+
+        // 2. Fetch the Citizen's ID so we can notify them
+        if (prefillData.case_id) {
+            const { data: caseData } = await supabase
+                .from('cases')
+                .select('user_id')
+                .eq('id', prefillData.case_id)
+                .single();
+
+            // 3. Send Real-time Push Notification to Citizen
+            if (caseData?.user_id) {
+                await sendNotification(
+                    caseData.user_id,
+                    "New Event Scheduled",
+                    `Your lawyer has scheduled a ${type}: ${title}`,
+                    "info",
+                    `/cases/${prefillData.case_id}`
+                );
+            }
+        }
+
+        toast.success("Schedule confirmed and client notified!");
+        
+        // Pass back to parent to update local UI without a refresh
+        if(onAdd) onAdd(newEvent || eventPayload); 
+        onClose();
+
+    } catch (error) {
+        console.error("Scheduling error:", error);
+        toast.error(error.message || "Failed to schedule event.");
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={!isSubmitting ? onClose : undefined} />
       <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
         
         {/* Header */}
@@ -42,7 +104,7 @@ export default function AddEventModal({ onClose, onAdd, prefillData = {} }) {
             <Calendar className="w-5 h-5 text-orange-400" />
             <span className="font-bold text-lg">Schedule Event</span>
           </div>
-          <button onClick={onClose} className="hover:bg-white/10 p-1 rounded transition-colors">
+          <button onClick={onClose} disabled={isSubmitting} className="hover:bg-white/10 p-1 rounded transition-colors disabled:opacity-50">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -129,9 +191,14 @@ export default function AddEventModal({ onClose, onAdd, prefillData = {} }) {
 
         {/* Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">Cancel</button>
-          <button onClick={handleSubmit} className="px-6 py-2 text-sm font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-lg shadow-lg shadow-orange-200 transition-all transform active:scale-95">
-            Confirm Schedule
+          <button onClick={onClose} disabled={isSubmitting} className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50">Cancel</button>
+          <button 
+            onClick={handleSubmit} 
+            disabled={isSubmitting}
+            className="px-6 py-2 text-sm font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-lg shadow-lg shadow-orange-200 transition-all flex items-center gap-2 disabled:opacity-70"
+          >
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {isSubmitting ? 'Scheduling...' : 'Confirm Schedule'}
           </button>
         </div>
 

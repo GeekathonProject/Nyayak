@@ -5,43 +5,74 @@ import {
   FileText, Shield, AlertCircle, Loader2, Calendar, MapPin, Download, Briefcase, Scale, Building2, Upload
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { useNotification } from "../../context/NotificationContext"; // Added for toasts/notifications
+import { useNotification } from "../../context/NotificationContext"; 
 
 export default function CaseDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { triggerToast, sendNotification } = useNotification(); // Initialize notifications
+  const { triggerToast, sendNotification } = useNotification(); 
+  
   const [caseData, setCaseData] = useState(null);
+  const [events, setEvents] = useState([]); 
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false); // Track upload state
+  const [uploading, setUploading] = useState(false); 
 
   useEffect(() => {
-    // 1. Validate ID before fetching
     if (!id || id === 'undefined') {
         setLoading(false);
         return;
     }
 
-    const fetchCase = async () => {
-      const { data, error } = await supabase
+    const fetchCaseAndEvents = async () => {
+      // 1. Fetch Main Case
+      const { data: cData, error: cError } = await supabase
         .from('cases')
         .select(`*, lawyers:lawyer_id ( name, hourly_rate, location, avatar_url )`)
         .eq('id', id)
         .single();
 
-      if (!error) setCaseData(data);
+      if (!cError) setCaseData(cData);
+
+      // 2. Fetch Scheduled Events
+      const { data: eData } = await supabase
+        .from('legal_events')
+        .select('*')
+        .eq('case_id', id)
+        .order('start_time', { ascending: true }); 
+        
+      if (eData) setEvents(eData);
+
       setLoading(false);
     };
 
-    fetchCase();
+    fetchCaseAndEvents();
 
-    // Realtime Listener
-    const channel = supabase.channel('case_detail').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'cases', filter: `id=eq.${id}` }, (payload) => {
+    // REALTIME: Listen for Main Case Updates
+    const caseChannel = supabase.channel('case_detail').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'cases', filter: `id=eq.${id}` }, (payload) => {
         setCaseData(prev => ({ ...prev, ...payload.new }));
     }).subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [id]);
+    // --- UPDATED REALTIME: Listen for New Schedules & TRIGGER POP-UP ---
+    const eventChannel = supabase.channel('event_detail').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'legal_events', filter: `case_id=eq.${id}` }, (payload) => {
+        
+        // 1. FIRE THE LIVE POP-UP ON THE CITIZEN'S SCREEN
+        triggerToast("New Schedule Added", `Your lawyer scheduled: ${payload.new.title}`, "info");
+
+        // 2. UPDATE THE UI LIST SEAMLESSLY
+        setEvents(prev => {
+            // Prevent duplicate rendering
+            if (prev.some(e => e.id === payload.new.id)) return prev;
+            
+            const updated = [...prev, payload.new];
+            return updated.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+        });
+    }).subscribe();
+
+    return () => { 
+        supabase.removeChannel(caseChannel); 
+        supabase.removeChannel(eventChannel);
+    };
+  }, [id, triggerToast]);
 
   // --- CITIZEN EVIDENCE UPLOAD LOGIC ---
   const handleFileUpload = async (e) => {
@@ -50,34 +81,21 @@ export default function CaseDetails() {
 
     setUploading(true);
     try {
-      // 1. Upload to Supabase Storage (organized in a citizen_evidence folder)
       const fileExt = file.name.split('.').pop();
       const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
       const filePath = `citizen_evidence/${caseData.id}/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(filePath, file);
-
+      const { error: uploadError } = await supabase.storage.from('documents').upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      // 2. Get Public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('documents')
-        .getPublicUrl(filePath);
+      const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(filePath);
 
-      // 3. Update 'documents' array in DB (Appending to existing evidence)
       const currentDocs = caseData.documents || [];
       const updatedDocs = [...currentDocs, publicUrl];
 
-      const { error: dbError } = await supabase
-        .from('cases')
-        .update({ documents: updatedDocs })
-        .eq('id', id);
-
+      const { error: dbError } = await supabase.from('cases').update({ documents: updatedDocs }).eq('id', id);
       if (dbError) throw dbError;
 
-      // 4. Update UI & Notify (If lawyer is assigned, notify them!)
       setCaseData(prev => ({ ...prev, documents: updatedDocs }));
       
       if (caseData.lawyer_id) {
@@ -86,7 +104,7 @@ export default function CaseDetails() {
              "New Evidence Uploaded",
              "Your client has attached new evidence to their case file.",
              "info",
-             `/lawyer/cases/${id}`
+             `/lawyer/active-cases/${id}`
           );
       }
 
@@ -99,7 +117,6 @@ export default function CaseDetails() {
     }
   };
 
-  // --- LOADING STATE ---
   if (loading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-[#0F172A] transition-colors duration-300">
        <Loader2 className="w-10 h-10 animate-spin text-blue-600 dark:text-blue-500 mb-4" />
@@ -107,7 +124,6 @@ export default function CaseDetails() {
     </div>
   );
 
-  // --- NOT FOUND STATE ---
   if (!caseData) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-[#0F172A] p-4 transition-colors duration-300">
        <div className="bg-white dark:bg-[#111827] p-10 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm text-center max-w-md w-full">
@@ -130,10 +146,7 @@ export default function CaseDetails() {
       <div className="max-w-6xl mx-auto animate-in fade-in duration-500 space-y-6">
         
         {/* Navigation & Header Area */}
-        <button 
-            onClick={() => navigate(-1)}
-            className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition font-bold text-xs uppercase tracking-wider flex items-center gap-2 mb-2"
-        >
+        <button onClick={() => navigate(-1)} className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition font-bold text-xs uppercase tracking-wider flex items-center gap-2 mb-2">
             <ArrowLeft className="w-4 h-4" /> Back to Records
         </button>
 
@@ -157,22 +170,20 @@ export default function CaseDetails() {
                         REF: {caseData.id.slice(0, 8)}
                     </span>
                 </div>
-                <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900 dark:text-white capitalize mb-2">
-                    {caseData.title}
-                </h1>
+                <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900 dark:text-white capitalize mb-2">{caseData.title}</h1>
                 <p className="text-slate-600 dark:text-slate-400 text-sm font-medium flex items-center gap-2">
                     <Clock className="w-4 h-4" /> Filed on {new Date(caseData.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                 </p>
             </div>
         </div>
 
-        {/* Dashboard Layout: 2 Columns on Large Screens */}
+        {/* Dashboard Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* LEFT COLUMN: Details & Facts */}
           <div className="lg:col-span-2 space-y-6">
             
-            {/* Incident Details (Only shown for Police FIRs) */}
+            {/* Incident Details */}
             {isFIR && (caseData.incident_date || caseData.location) && (
                 <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 p-6 md:p-8 rounded-3xl shadow-sm">
                     <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-6 uppercase tracking-widest flex items-center gap-2">
@@ -201,7 +212,7 @@ export default function CaseDetails() {
                 </div>
             )}
 
-            {/* Case Description & Client Evidence */}
+            {/* Official Statement & Evidence */}
             <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 p-6 md:p-8 rounded-3xl shadow-sm">
               <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-6 uppercase tracking-widest flex items-center gap-2">
                  <FileText className="w-4 h-4" /> Official Statement
@@ -211,13 +222,10 @@ export default function CaseDetails() {
               </p>
               
               <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
-                 
-                 {/* EVIDENCE HEADER WITH NEW UPLOAD BUTTON */}
                  <div className="flex items-center justify-between mb-4">
                     <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
                         <Download className="w-4 h-4" /> Attached Evidence
                     </h3>
-                    
                     <label className={`cursor-pointer text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 uppercase tracking-widest flex items-center gap-1 transition-colors ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
                         {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
                         {uploading ? 'Uploading...' : '+ Add Evidence'}
@@ -239,9 +247,40 @@ export default function CaseDetails() {
               </div>
             </div>
 
-            {/* NEW: Official Police Reports (Only shows if Police uploaded something) */}
+            {/* --- NEW: SCHEDULE & HEARINGS DISPLAY --- */}
+            {events.length > 0 && (
+                <div className="bg-white dark:bg-[#111827] border border-slate-200 dark:border-slate-800 p-6 md:p-8 rounded-3xl shadow-sm">
+                    <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 mb-6 uppercase tracking-widest flex items-center gap-2">
+                        <Calendar className="w-4 h-4" /> Schedule & Hearings
+                    </h3>
+                    <div className="space-y-4">
+                        {events.map((evt, i) => (
+                            <div key={evt.id || i} className="flex gap-5 p-5 rounded-2xl border border-slate-100 dark:border-slate-700/50 bg-slate-50 dark:bg-[#1F2937]/50 hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                                <div className="flex flex-col items-center justify-center min-w-[70px] bg-white dark:bg-slate-800 rounded-xl p-3 shadow-sm border border-slate-200 dark:border-slate-700">
+                                    <span className="text-xs font-bold text-orange-500 uppercase">{new Date(evt.start_time).toLocaleString('en-US', { month: 'short' })}</span>
+                                    <span className="text-2xl font-black text-slate-900 dark:text-white leading-none mt-1">{new Date(evt.start_time).getDate()}</span>
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded">{evt.event_type}</span>
+                                        {evt.risk_level === 'Critical' && <span className="text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-900/50 px-2 py-0.5 rounded">Critical</span>}
+                                        {evt.risk_level === 'Important' && <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-900/50 px-2 py-0.5 rounded">Important</span>}
+                                    </div>
+                                    <h4 className="font-bold text-slate-900 dark:text-white text-base leading-snug">{evt.title}</h4>
+                                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-2.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                                        <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/> {new Date(evt.start_time).toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'})}</span>
+                                        <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/> {evt.location}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Official Police Reports */}
             {isFIR && caseData.police_documents && caseData.police_documents.length > 0 && (
-                <div className="bg-gradient-to-br from-slate-50 to-white dark:from-slate-800/50 dark:to-[#111827] border border-slate-200 dark:border-slate-700 p-6 md:p-8 rounded-3xl shadow-sm relative overflow-hidden mt-6">
+                <div className="bg-gradient-to-br from-slate-50 to-white dark:from-slate-800/50 dark:to-[#111827] border border-slate-200 dark:border-slate-700 p-6 md:p-8 rounded-3xl shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-slate-500"></div>
                     <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-6 flex items-center gap-2">
                         <Shield className="w-4 h-4" /> Official Police Reports
@@ -264,9 +303,9 @@ export default function CaseDetails() {
                 </div>
             )}
 
-            {/* NEW: Documents Prepared by Counsel (Only shows if ACTIVE and documents exist) */}
+            {/* Documents Prepared by Counsel */}
             {caseData.status === 'Active' && caseData.lawyer_documents && caseData.lawyer_documents.length > 0 && (
-                <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/10 dark:to-[#111827] border border-blue-200 dark:border-blue-900/30 p-6 md:p-8 rounded-3xl shadow-sm relative overflow-hidden mt-6">
+                <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/10 dark:to-[#111827] border border-blue-200 dark:border-blue-900/30 p-6 md:p-8 rounded-3xl shadow-sm relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
                     <h3 className="text-xs font-bold text-blue-600 uppercase tracking-widest mb-6 flex items-center gap-2">
                         <Scale className="w-4 h-4" /> Documents Prepared by Counsel
@@ -363,7 +402,6 @@ export default function CaseDetails() {
               
               {/* Logic Branching */}
               {caseData.lawyers ? (
-                 // SCENARIO 1: Lawyer Assigned
                  <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-[#1F2937] border border-slate-100 dark:border-slate-800 rounded-2xl">
                     <div className="h-16 w-16 rounded-full border-2 border-white dark:border-slate-700 overflow-hidden bg-slate-200 dark:bg-slate-800 flex items-center justify-center shadow-sm shrink-0">
                        {caseData.lawyers.avatar_url ? (
@@ -382,7 +420,6 @@ export default function CaseDetails() {
                  </div>
 
               ) : isFIR && ['Approved', 'Rejected', 'NCR'].includes(caseData.police_status) ? (
-                 // SCENARIO 2: FIR Processed, No Lawyer Yet -> Hire CTA
                  <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/50 p-5 rounded-2xl flex flex-col gap-4">
                     <p className="text-sm text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
                       {caseData.police_status === 'Approved' 
@@ -398,14 +435,12 @@ export default function CaseDetails() {
                  </div>
 
               ) : isFIR && caseData.police_status === 'Pending' ? (
-                 // SCENARIO 3: Waiting on police
                  <div className="flex flex-col items-center justify-center text-center gap-3 bg-slate-50 dark:bg-[#1F2937] p-6 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
                     <Shield className="w-8 h-8 text-slate-300 dark:text-slate-600" />
                     <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Awaiting police station determination before counsel can be assigned.</span>
                  </div>
 
               ) : (
-                 // SCENARIO 4: Standard Direct Case
                  <div className="flex flex-col items-center justify-center text-center gap-3 bg-slate-50 dark:bg-[#1F2937] p-6 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
                     <Clock className="w-8 h-8 text-slate-300 dark:text-slate-600 animate-pulse" />
                     <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Broadcasting request to verified professionals in your area.</span>
